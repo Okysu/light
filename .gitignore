@@ -1,0 +1,23 @@
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# AI-assisted planning and implementation notes stay local
+/docs/
+/output/
+
+# Tauri 构建产物
+src-tauri/target/
+src-tauri/gen/
+
+# 编辑器与系统
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# 日志
+*.log
+npm-debug.log*
+pnpm-debug.log*

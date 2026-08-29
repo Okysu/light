@@ -1,0 +1,506 @@
+/**
+ * Milkdown 官方组件（代码块 / 表格）的样式。
+ *
+ * 这些组件只提供结构与行为，**不附带任何 CSS**（Crepe 的样式在它自己的包里，
+ * Kit 模式下需要使用方自行提供）。缺样式时工具栏会散成一列纯文本、
+ * 浮层常驻展开——因此这份文件是功能可用的前提，不是装饰。
+ *
+ * 显隐一律由组件写在 DOM 上的状态属性驱动，这里只负责把它们翻译成样式：
+ *   [data-show="false"]        —— 拖拽预览、官方操作按钮组
+ *                                （行列把手的显隐由本文件的 :hover 规则接管）
+ *   [data-expanded="false"]    —— 语言选择器
+ *   .hidden                    —— 搜索框的清除按钮
+ *
+ * 颜色全部走主题变量，明暗主题与用户自定义 CSS 自动跟随。
+ */
+
+/* ===========================================================================
+ * 代码块
+ * ======================================================================== */
+
+.milkdown-code-block {
+  position: relative;
+  margin: 0.75em 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--muted);
+  overflow: visible;
+}
+
+.milkdown-code-block .tools {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+/* --- 语言按钮与选择器 --- */
+
+.milkdown-code-block .language-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  height: 1.6rem;
+  padding: 0 0.5rem;
+  border: 1px solid transparent; /* 边框常驻（S2） */
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted-foreground);
+  font-family: var(--light-font-sans);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.milkdown-code-block .language-button:hover {
+  background: var(--background);
+  color: var(--foreground);
+  border-color: var(--border);
+}
+
+.milkdown-code-block .expand-icon {
+  display: inline-flex;
+  transition: transform 150ms ease;
+}
+
+.milkdown-code-block .language-button[data-expanded='true'] .expand-icon {
+  transform: rotate(180deg);
+}
+
+/* 选择器是按钮的相邻兄弟，未展开时收起 */
+.milkdown-code-block .language-button[data-expanded='false'] + .language-picker {
+  display: none;
+}
+
+.milkdown-code-block .language-picker {
+  position: absolute;
+  z-index: 30;
+  top: 2.2rem;
+  left: 0.5rem;
+  width: 15rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+  overflow: hidden;
+}
+
+.milkdown-code-block .list-wrapper {
+  display: flex;
+  flex-direction: column;
+  max-height: 18rem;
+}
+
+.milkdown-code-block .search-box {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.milkdown-code-block .search-icon,
+.milkdown-code-block .clear-icon {
+  display: inline-flex;
+  color: var(--muted-foreground);
+}
+
+.milkdown-code-block .clear-icon {
+  cursor: pointer;
+}
+
+/* 组件用 .hidden 表达「无内容可清除」 */
+.milkdown-code-block .clear-icon.hidden {
+  display: none;
+}
+
+.milkdown-code-block .search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 0.8rem;
+  outline: none;
+}
+
+.milkdown-code-block .search-input::placeholder {
+  color: var(--muted-foreground);
+}
+
+.milkdown-code-block .language-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.25rem;
+  margin: 0;
+  list-style: none;
+}
+
+.milkdown-code-block .language-list-item {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.milkdown-code-block .language-list-item:hover,
+.milkdown-code-block .language-list-item[data-selected='true'] {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+/* --- 右侧按钮组 --- */
+
+.milkdown-code-block .tools-button-group {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  margin-left: auto;
+}
+
+.milkdown-code-block .tools-button-group button,
+.milkdown-code-block .preview-toggle-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  height: 1.6rem;
+  padding: 0 0.45rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted-foreground);
+  font-family: var(--light-font-sans);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.milkdown-code-block .tools-button-group button:hover,
+.milkdown-code-block .preview-toggle-button:hover {
+  background: var(--background);
+  color: var(--foreground);
+  border-color: var(--border);
+}
+
+/* 复制按钮的文案由 CSS 输出（配置里 copyText 置空），
+   这样可以按 data-copied 在「复制 / 已复制」之间切换。 */
+.milkdown-code-block .copy-button::after {
+  content: '复制';
+  font-size: 0.75rem;
+}
+
+.milkdown-code-block .copy-button[data-copied='true'] {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.milkdown-code-block .copy-button[data-copied='true']::after {
+  content: '已复制';
+}
+
+.milkdown-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.milkdown-icon svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+/* --- CodeMirror 宿主 --- */
+
+.milkdown-code-block .codemirror-host {
+  padding: 0.25rem 0.5rem;
+}
+
+.milkdown-code-block .cm-editor {
+  background: transparent;
+}
+
+/* 行号：与正文拉开距离并弱化，避免喧宾夺主 */
+.milkdown-code-block .cm-gutters {
+  background: transparent;
+  border: none;
+  color: var(--muted-foreground);
+  opacity: 0.6;
+  user-select: none;
+}
+
+.milkdown-code-block .cm-lineNumbers .cm-gutterElement {
+  padding: 0 0.6rem 0 0.3rem;
+  min-width: 1.6rem;
+  font-family: var(--light-font-mono);
+  font-size: 0.8em;
+}
+
+/* --- 预览区（Mermaid 等） --- */
+
+.milkdown-code-block .preview-panel,
+.milkdown-code-block [class*='preview'] {
+  border-top: 1px solid var(--border);
+}
+
+.milkdown-code-block .preview-panel:empty {
+  display: none;
+}
+
+/* ===========================================================================
+ * 表格
+ * ======================================================================== */
+
+/* 表格的外层是 .milkdown-table-block，把手与操作浮层挂在它下面，
+   而不是更内层的 .table-wrapper——选择器写错会导致按钮全部散落成文本 */
+.light-prose .milkdown-table-block {
+  position: relative;
+  /* 四周留出把手与边缘按钮的空间，再用负 margin 把左/上抵消回去，
+     这样表格视觉位置不变，但**可悬停区域**覆盖了浮在表格外侧的把手——
+     否则鼠标从单元格移向把手的途中就离开了判定区，把手随即消失、根本点不到。 */
+  margin: calc(0.75em - 1rem) 0 0.75em -1.2rem;
+  padding: 1rem 1.4rem 1.4rem 1.2rem;
+}
+
+.light-prose .table-wrapper {
+  position: relative;
+  overflow: visible;
+}
+
+/* 拖拽预览仍听组件的 data-show */
+.light-prose .milkdown-table-block .drag-preview[data-show='false'] {
+  display: none;
+}
+
+/* 官方的行列操作按钮组**一律隐藏**：点击把手时它会自行弹出，
+   与我们自己的菜单叠在一起（用户看到的那排 ••• 就是它）。
+   行列操作统一走 TableMenu，只保留一套入口。 */
+.light-prose .milkdown-table-block .button-group {
+  display: none;
+}
+
+/* 把手一律绝对定位（位置由组件实时写入 style）。
+   这里不再用 :not([data-show='false']) 限定——把手需要在 data-show 为 false 时
+   仍保持定位与布局，可见性交给下面的 :hover 规则控制。 */
+.light-prose .milkdown-table-block .handle {
+  position: absolute;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 官方的行列把手一律隐藏，改用自建把手（handles.ts / TableHandles.vue）。
+   官方把手只在它自己的悬停判定内更新位置，与「鼠标移向把手」的过程对不上，
+   表现为位置滞后、重影、够不着。 */
+.light-prose .milkdown-table-block .cell-handle {
+  display: none;
+}
+
+/* 官方组件在行列边界内部也放了加号，需要精确悬停才出得来。
+   我们已在表格外侧提供常驻加号带，内部这套一律隐藏，避免两套入口互相干扰。 */
+/* 多带一个 [data-role] 把特异性提到 (0,4,1)，稳定压过上面
+   `.handle` 的定位规则，无需借助 !important */
+.light-prose .milkdown-table-block .handle.line-handle[data-role] {
+  display: none;
+}
+
+/* 下面的 add-button 样式保留：外部边缘按钮之外，
+   官方仍可能在其它位置复用同一类名 */
+.light-prose .milkdown-table-block .add-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  background: var(--background);
+  color: var(--muted-foreground);
+  font-size: 0.8rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.light-prose .milkdown-table-block .add-button:hover {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+}
+
+.light-prose .milkdown-table-block .drag-preview {
+  position: absolute;
+  z-index: 20;
+  opacity: 0.75;
+  pointer-events: none;
+  background: var(--background);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 15%);
+}
+
+/* --- 边缘常驻添加按钮（右侧加列 / 底部加行 / 右下角同时加） ---------- */
+
+.light-prose .light-table-edge {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent; /* 边框常驻（S2） */
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklch, var(--muted) 70%, transparent);
+  color: var(--muted-foreground);
+  font-size: 0.85rem;
+  line-height: 1;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 120ms ease, background-color 120ms ease, color 120ms ease;
+}
+
+/* 悬停表格时才浮现，避免静态阅读时被按钮包围 */
+.light-prose .milkdown-table-block:hover .light-table-edge {
+  opacity: 1;
+}
+
+.light-prose .light-table-edge:hover {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+  opacity: 1;
+}
+
+/* 右侧整条：加一列 */
+.light-prose .light-table-edge-col {
+  top: 0;
+  right: 0.15rem;
+  width: 1.1rem;
+  bottom: 1.55rem;
+}
+
+/* 底部整条：加一行 */
+.light-prose .light-table-edge-row {
+  left: 0;
+  right: 1.55rem;
+  bottom: 0.15rem;
+  height: 1.1rem;
+}
+
+/* 右下角方块：同时加一行一列 */
+.light-prose .light-table-edge-both {
+  right: 0.15rem;
+  bottom: 0.15rem;
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+
+
+/* ===========================================================================
+ * 自建行列把手（handles.ts / TableHandles.vue）
+ * 位置由鼠标所在单元格实时算出，Teleport 到 body，
+ * 因此不受编辑器内部滚动容器与 ProseMirror DOM 同步的影响。
+ * ======================================================================== */
+
+.light-table-handle {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  background: var(--background);
+  color: var(--muted-foreground);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.light-table-handle:hover {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+}
+
+/* 把手上的点：横向把手排成一行，纵向排成一列 */
+.light-table-handle::after {
+  content: '•••';
+  font-size: 0.5rem;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
+.light-table-handle-row::after {
+  writing-mode: vertical-rl;
+}
+
+/* --- 文字高亮 --------------------------------------------------------- */
+
+.light-prose mark.light-highlight,
+.light-prose mark[data-highlight] {
+  padding: 0.05em 0.14em;
+  border-radius: 0.18em;
+  background: color-mix(in oklch, var(--warning, #facc15) 42%, transparent);
+  color: inherit;
+  box-decoration-break: clone;
+}
+
+/* --- 音频 / 视频附件 -------------------------------------------------- */
+
+.light-prose .light-media-shell {
+  display: grid;
+  width: min(100%, 54rem);
+  margin: 1rem auto;
+  padding: 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklch, var(--muted) 42%, transparent);
+}
+
+.light-prose .light-media-shell audio,
+.light-prose .light-media-shell video {
+  display: block;
+  width: 100%;
+}
+
+.light-prose .light-media-shell video {
+  max-height: min(68vh, 42rem);
+  border-radius: calc(var(--radius-md) - 0.25rem);
+  background: #000;
+}
+
+.light-prose .light-media-shell.is-selected {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.light-prose .light-media-missing {
+  padding: 0.75rem;
+  color: var(--destructive);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.light-prose .light-document-embed {
+  display: grid;
+  width: min(100%, 34rem);
+  margin: 1rem 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  color: var(--card-foreground);
+  text-align: left;
+  cursor: pointer;
+}
+
+.light-prose .light-document-embed:hover { border-color: var(--primary); }
+.light-prose .light-document-embed.is-selected { outline: 2px solid var(--ring); }
+.light-document-embed-kind { color: var(--muted-foreground); font-size: 0.75rem; }
+.light-document-embed small { color: var(--muted-foreground); font-size: 0.75rem; }

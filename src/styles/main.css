@@ -1,0 +1,369 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* ===========================================================================
+ * Light 主题变量层
+ * ---------------------------------------------------------------------------
+ * 分三层，用户自定义 CSS 只需覆盖第 1、2 层即可完成换肤，无需改组件结构：
+ *   1. 语义色板（--background / --primary / ...）  —— shadcn-vue 组件契约
+ *   2. 排版与密度（--light-*）                     —— Light 自有的阅读体验变量
+ *   3. Tailwind 映射（@theme inline）              —— 不要覆盖，仅做桥接
+ * ======================================================================== */
+
+/* --- 1. 语义色板：浅色 --- */
+:root {
+  --radius: 0.625rem;
+  /* 画板便利贴底色：明暗两套各自定义，导出时会被解析成具体色值 */
+  --light-note-bg: oklch(0.95 0.06 95);
+  /* 画板图形的可选颜色。用变量而不是写死色值：深色模式下自动换一套，
+     导出时会被解析成具体色值（见 features/canvas/export.ts） */
+  --light-shape-red: oklch(0.58 0.20 25);
+  --light-shape-orange: oklch(0.68 0.16 60);
+  --light-shape-green: oklch(0.58 0.15 150);
+  --light-shape-blue: oklch(0.56 0.17 250);
+  --light-shape-purple: oklch(0.55 0.19 300);
+
+
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+
+  /* --- 2. 排版与密度：设置面板与自定义主题直接改这些 --- */
+  --light-font-sans: 'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --light-font-mono: 'JetBrains Mono', 'Cascadia Code', ui-monospace, monospace;
+  --light-editor-width: 45rem;
+  --light-editor-font-size: 1rem;
+  --light-editor-line-height: 1.75;
+  --light-density: 1; /* 侧边栏行高倍率：0.85 紧凑 / 1 标准 / 1.15 宽松 */
+
+  /* 代码高亮色板：按语义命名而非按语言，任何语言的同类词元共用一色。
+     单列一组变量是为了让用户能在自定义 CSS 里整体换配色，而不必逐条覆盖选择器。 */
+  --light-code-keyword: oklch(0.45 0.19 295);
+  --light-code-string: oklch(0.48 0.14 145);
+  --light-code-comment: oklch(0.62 0.02 260);
+  --light-code-number: oklch(0.52 0.16 45);
+  --light-code-function: oklch(0.48 0.16 255);
+  --light-code-variable: oklch(0.35 0.02 260);
+  --light-code-type: oklch(0.5 0.13 195);
+  --light-code-operator: oklch(0.5 0.09 15);
+  --light-code-punctuation: oklch(0.55 0.02 260);
+  --light-code-invalid: oklch(0.55 0.22 25);
+}
+
+/* 键盘用户始终获得清晰焦点；鼠标点击不额外制造视觉噪音。 */
+:where(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* 命令面板的输入框与顶栏是一体，不绘制独立焦点框；对话框本身仍保留可见焦点边界。 */
+.light-command-input:focus,
+.light-command-input:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.light-window-control {
+  display: grid;
+  width: 46px;
+  height: 100%;
+  place-items: center;
+  color: var(--muted-foreground);
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.light-window-control:hover { background: var(--accent); color: var(--foreground); }
+.light-window-control svg { width: 12px; height: 12px; stroke-width: 1.6; }
+.light-mac-control { width: 12px; height: 12px; border-radius: 999px; border: 1px solid rgb(0 0 0 / 12%); }
+
+/* 系统要求减少动态效果时，所有非必要动画即时完成。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* --- 1. 语义色板：深色 --- */
+.dark {
+  --light-shape-red: oklch(0.70 0.18 25);
+  --light-shape-orange: oklch(0.78 0.14 60);
+  --light-shape-green: oklch(0.72 0.14 150);
+  --light-shape-blue: oklch(0.70 0.15 250);
+  --light-shape-purple: oklch(0.70 0.16 300);
+  --light-note-bg: oklch(0.42 0.06 95);
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+
+  /* 深色下提高亮度与降低彩度，避免在暗背景上刺眼 */
+  --light-code-keyword: oklch(0.75 0.15 295);
+  --light-code-string: oklch(0.78 0.13 145);
+  --light-code-comment: oklch(0.55 0.02 260);
+  --light-code-number: oklch(0.78 0.13 55);
+  --light-code-function: oklch(0.75 0.13 255);
+  --light-code-variable: oklch(0.87 0.01 260);
+  --light-code-type: oklch(0.78 0.11 195);
+  --light-code-operator: oklch(0.78 0.09 15);
+  --light-code-punctuation: oklch(0.65 0.02 260);
+  --light-code-invalid: oklch(0.7 0.19 25);
+}
+
+/* --- 3. Tailwind 映射层：桥接语义变量到工具类，勿在自定义 CSS 中覆盖 --- */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --font-sans: var(--light-font-sans);
+  --font-mono: var(--light-font-mono);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* ===========================================================================
+ * 样式约定：边框常驻（S2）
+ * ---------------------------------------------------------------------------
+ * 凡是在某个状态下会出现边框的元素，**常态就要保留边框宽度**，仅把颜色设为
+ * `transparent`，切换状态时只改颜色。
+ *
+ * 原因：边框从无到有会改变元素的内容盒尺寸，触发同级元素位移与布局重算——
+ * 表现为 hover 时文字轻微跳动、容器溢出。写法上就是
+ * `border border-transparent` + `hover:border-border`，
+ * 而不是只写 `hover:border`。
+ *
+ * 同理，按钮的所有 variant 都带上透明边框，使 outline 与其它 variant 尺寸一致，
+ * 切换 variant（例如「永久删除」变为「确认删除？」）时不会跳动。
+ * ======================================================================== */
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    /* 桌面端禁止整页橡皮筋滚动，滚动交给内部面板 */
+    overscroll-behavior: none;
+  }
+
+  /* 客户端窗口内禁止文本选中蔓延到 UI 外壳，编辑区单独放开 */
+  .app-chrome {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* ---------------------------------------------------------------------
+   * 滚动条（S1）
+   * 主要区域用 <ScrollArea> 自绘；此处是兜底，覆盖那些不便包组件的地方
+   * （编辑器内部、下拉菜单、textarea 等）。颜色走主题变量，
+   * 因此暗色模式与用户自定义 CSS 都能自动跟随，不再出现系统默认的灰色滚动条。
+   * ------------------------------------------------------------------ */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 9999px;
+    /* 用透明边框把滑块「收窄」，同时保持点击热区，避免 hover 时宽度突变 */
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklch, var(--muted-foreground) 55%, transparent);
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+/* Collapsible（reka-ui）的展开/收起动画。
+   高度由组件在运行时写入 --reka-collapsible-content-height，
+   没有这两个 keyframes 的话折叠仍可用，只是会瞬间跳变。 */
+@theme {
+  --animate-collapsible-down: collapsible-down 160ms ease-out;
+  --animate-collapsible-up: collapsible-up 160ms ease-out;
+}
+
+@keyframes collapsible-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--reka-collapsible-content-height);
+  }
+}
+
+@keyframes collapsible-up {
+  from {
+    height: var(--reka-collapsible-content-height);
+  }
+  to {
+    height: 0;
+  }
+}
+
+/* ---------------------------------------------------------------------
+ * 打印 / 导出 PDF（需求 10.2）
+ *
+ * 不引入 PDF 生成库：浏览器的打印管线已经能「另存为 PDF」，而任何
+ * JS 生成方案都要自己处理分页、中文字体嵌入与代码块换行——那是一整个
+ * 子系统的工作量，换来的结果还未必比浏览器好。
+ *
+ * 打印时只留正文：外壳、侧边栏、标签页、属性表单与反向链接都是**导航**，
+ * 印在纸上没有意义。
+ * ------------------------------------------------------------------ */
+@media print {
+  /* 打印时整页可滚动，否则内部 overflow 容器只会印出第一屏 */
+  html,
+  body,
+  #app,
+  .app-chrome {
+    height: auto !important;
+    overflow: visible !important;
+    display: block !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .light-print-hide,
+  header,
+  aside,
+  footer,
+  [role='dialog'],
+  [data-slot='scroll-area-scrollbar'] {
+    display: none !important;
+  }
+
+  /* 编辑区去掉宽度限制与滚动，让内容自然流到多页 */
+  main,
+  .milkdown,
+  .light-prose {
+    max-width: none !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* 标题栏在纸上就是文章标题 */
+  .light-doc-title {
+    border: none !important;
+    resize: none !important;
+  }
+
+  /* 代码块跨页时不截断，也不要出现滚动条 */
+  .light-prose pre,
+  .cm-editor {
+    overflow: visible !important;
+    white-space: pre-wrap !important;
+    break-inside: avoid;
+  }
+
+  /* 标题不要孤零零留在页尾 */
+  .light-prose h1,
+  .light-prose h2,
+  .light-prose h3 {
+    break-after: avoid;
+  }
+
+  .light-prose img,
+  .light-prose table {
+    break-inside: avoid;
+  }
+}
