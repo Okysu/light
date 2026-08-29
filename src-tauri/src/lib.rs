@@ -10,6 +10,60 @@ const MAIN_LABEL: &str = "main";
 /// 前端的自动保存是防抖的，直接退出会吞掉最后几百毫秒的编辑。
 const EVENT_FLUSH: &str = "light://flush";
 
+/// 托盘菜单项句柄。菜单由 Rust 主进程持有，不会随 Vue 语言切换自动重建，
+/// 因此保留句柄让前端通过命令原地更新文案。
+struct TrayMenuItems {
+    show: MenuItem<tauri::Wry>,
+    capture: MenuItem<tauri::Wry>,
+    quit: MenuItem<tauri::Wry>,
+}
+
+struct TrayLabels {
+    show: &'static str,
+    capture: String,
+    quit: &'static str,
+}
+
+fn tray_labels(locale: &str) -> TrayLabels {
+    let shortcut = if cfg!(target_os = "macos") {
+        "⌘⇧Space"
+    } else {
+        "Ctrl+Shift+Space"
+    };
+
+    if locale == "en-US" {
+        TrayLabels {
+            show: "Show Light",
+            capture: format!("Quick Capture  {shortcut}"),
+            quit: "Quit Light",
+        }
+    } else {
+        TrayLabels {
+            show: "显示主窗口",
+            capture: format!("速记  {shortcut}"),
+            quit: "退出 Light",
+        }
+    }
+}
+
+#[tauri::command]
+fn set_tray_locale(locale: String, items: tauri::State<'_, TrayMenuItems>) -> Result<(), String> {
+    let labels = tray_labels(&locale);
+    items
+        .show
+        .set_text(labels.show)
+        .map_err(|error| error.to_string())?;
+    items
+        .capture
+        .set_text(labels.capture)
+        .map_err(|error| error.to_string())?;
+    items
+        .quit
+        .set_text(labels.quit)
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 /// 把用户选定的工作区目录加入文件系统作用域。
 ///
 /// Tauri 2 的 fs 插件默认只允许 capabilities 里预先声明的路径。工作区目录由用户
@@ -275,9 +329,10 @@ fn selftest_scope(app: &AppHandle) {
 
 /// 托盘：常驻入口。有了它，主窗口关闭后进程仍在，全局快捷键才继续有效。
 fn install_tray(app: &AppHandle) -> tauri::Result<()> {
-    let show = MenuItem::with_id(app, "show", "显示主窗口", true, None::<&str>)?;
-    let capture = MenuItem::with_id(app, "capture", "速记  Ctrl+Shift+Space", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "退出 Light", true, None::<&str>)?;
+    let labels = tray_labels("zh-CN");
+    let show = MenuItem::with_id(app, "show", labels.show, true, None::<&str>)?;
+    let capture = MenuItem::with_id(app, "capture", labels.capture, true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", labels.quit, true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
         &[&show, &capture, &PredefinedMenuItem::separator(app)?, &quit],
@@ -308,6 +363,12 @@ fn install_tray(app: &AppHandle) -> tauri::Result<()> {
             }
         })
         .build(app)?;
+
+    app.manage(TrayMenuItems {
+        show,
+        capture,
+        quit,
+    });
 
     Ok(())
 }
@@ -371,7 +432,8 @@ pub fn run() {
             allow_workspace,
             write_export,
             prepare_data_dir,
-            import_path
+            import_path,
+            set_tray_locale
         ])
         .on_window_event(|window, event| on_window_event(window, event))
         .setup(|app| {
@@ -395,4 +457,27 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::tray_labels;
+
+    #[test]
+    fn tray_labels_follow_locale() {
+        let zh = tray_labels("zh-CN");
+        assert_eq!(zh.show, "显示主窗口");
+        assert!(zh.capture.starts_with("速记"));
+        assert_eq!(zh.quit, "退出 Light");
+
+        let en = tray_labels("en-US");
+        assert_eq!(en.show, "Show Light");
+        assert!(en.capture.starts_with("Quick Capture"));
+        assert_eq!(en.quit, "Quit Light");
+    }
+
+    #[test]
+    fn unknown_locale_falls_back_to_chinese() {
+        assert_eq!(tray_labels("unknown").show, "显示主窗口");
+    }
 }

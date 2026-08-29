@@ -7,6 +7,12 @@ interface Capability {
   permissions?: string[]
 }
 
+interface TauriConfig {
+  app?: {
+    windows?: Array<{ dragDropEnabled?: boolean }>
+  }
+}
+
 describe('Tauri 文件系统 capability', () => {
   it('允许客户端同步以流方式读写工作区文件', () => {
     const path = join(process.cwd(), 'src-tauri', 'capabilities', 'default.json')
@@ -18,5 +24,13 @@ describe('Tauri 文件系统 capability', () => {
       'fs:allow-read',
       'fs:allow-write',
     ]))
+  })
+
+  it('关闭原生拖放接管，让 Windows WebView 使用 HTML5 文件树拖拽', () => {
+    const path = join(process.cwd(), 'src-tauri', 'tauri.conf.json')
+    const config = JSON.parse(readFileSync(path, 'utf8')) as TauriConfig
+
+    expect(config.app?.windows).not.toHaveLength(0)
+    expect(config.app?.windows?.every((window) => window.dragDropEnabled === false)).toBe(true)
   })
 })

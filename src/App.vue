@@ -25,6 +25,7 @@ import TrashPanel from '@/features/trash/TrashPanel.vue'
 import { formatRelativeTime } from '@/lib/utils'
 import { useAiStore } from '@/stores/ai'
 import { useEditorStore } from '@/stores/editor'
+import { useExportStore } from '@/stores/export'
 import { useAttachmentsStore } from '@/stores/attachments'
 import { useCanvasStore } from '@/stores/canvas'
 import { useBoardStore } from '@/stores/board'
@@ -69,6 +70,7 @@ const boardStore = useBoardStore()
 const security = useSecurityStore()
 const i18n = useI18nStore()
 const toast = useToastStore()
+const exporter = useExportStore()
 
 workspace.onBeforeOpen(async () => {
   await Promise.all([editor.flush(), boardStore.flush(), canvasStore.flush()])
@@ -121,6 +123,7 @@ watch(
     () => sync.error,
     () => ai.error,
     () => search.error,
+    () => exporter.error,
   ],
   (current, previous) => {
     current.forEach((message, index) => {
@@ -128,6 +131,12 @@ watch(
     })
   },
 )
+
+// 导出可能从设置、命令面板或文件树触发。结果统一浮到顶层，不能只留在
+// 某个已经关闭的面板里，更不能让右键菜单里的失败看起来像没有响应。
+watch(() => exporter.lastResult, (message, previous) => {
+  if (message && message !== previous) toast.success(message)
+})
 
 // 改名跟随会在后台改写若干篇笔记，索引与链接图缓存的是旧文本，必须一并更新
 workspace.onRewritten((paths) => {

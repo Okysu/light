@@ -4,6 +4,7 @@ import type { ImportResult } from '@/core/workspace/import-service'
 import { computed, ref, shallowRef } from 'vue'
 import { createEmptyBoard } from '@/core/board/types'
 import { createEmptyCanvas } from '@/core/canvas/types'
+import { dirname, normalizePath } from '@/core/path'
 import { LinkRewriter } from '@/core/links/link-rewriter'
 import { HistoryService } from '@/core/history/history-service'
 import { NoteRepository } from '@/core/workspace/note-repository'
@@ -307,6 +308,10 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   }
 
   async function move(path: string, targetDir: string): Promise<string> {
+    // 同目录放下是空操作。领域仓储也会防御，但在编排层提前返回还能避免
+    // 无意义的全树刷新、链接重写和标签页重定向。
+    if (dirname(path) === normalizePath(targetDir)) return path
+
     const pathsBefore = notePaths()
 
     const next = await requireNotes().move(path, targetDir)

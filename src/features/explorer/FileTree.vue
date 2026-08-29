@@ -16,8 +16,7 @@ import { useUiStore } from '@/stores/ui'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useI18nStore } from '@/stores/i18n'
 import TreeItem from './TreeItem.vue'
-
-const DRAG_TYPE = 'application/x-light-path'
+import { hasTreeDrag, readTreeDrag } from './drag-data'
 
 const workspace = useWorkspaceStore()
 const editor = useEditorStore()
@@ -248,14 +247,14 @@ function findSiblings(nodes: TreeNode[], path: string): TreeNode[] | null {
 }
 
 function onRootDragOver(event: DragEvent): void {
-  if (!event.dataTransfer?.types.includes(DRAG_TYPE)) return
+  if (!hasTreeDrag(event.dataTransfer)) return
   event.preventDefault()
   rootDropActive.value = true
 }
 
 function onRootDrop(event: DragEvent): void {
   rootDropActive.value = false
-  const source = event.dataTransfer?.getData(DRAG_TYPE)
+  const source = readTreeDrag(event.dataTransfer)
   // 已在根目录的条目不必再移动
   if (!source || !source.includes('/')) return
   event.preventDefault()

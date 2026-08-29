@@ -27,6 +27,7 @@ describe('scanTree', () => {
 
   it('过滤 .light 等元数据目录与非笔记文件', async () => {
     await fs.writeText('.light/workspace.json', '{}')
+    await fs.writeText('.light-sync/staging/upload.md', '同步临时文件')
     await fs.writeText('.obsidian/app.json', '{}')
     await fs.writeText('attachments/图片.png', '')
     await fs.writeText('a.md', '')
@@ -36,6 +37,7 @@ describe('scanTree', () => {
     expect(paths).toContain('attachments') // 目录本身保留，仅过滤非笔记文件
     expect(paths).not.toContain('attachments/图片.png')
     expect(paths.some((path) => path.startsWith('.light'))).toBe(false)
+    expect(paths.some((path) => path.startsWith('.light-sync'))).toBe(false)
     expect(paths.some((path) => path.startsWith('.obsidian'))).toBe(false)
   })
 

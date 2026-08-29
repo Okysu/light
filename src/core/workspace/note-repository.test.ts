@@ -137,6 +137,14 @@ describe('NoteRepository', () => {
       expect(await repo.move(path, 'b/c')).toBe('b/c/笔记.md')
       expect(await fs.exists('b/c/笔记.md')).toBe(true)
     })
+
+    it('拖回当前目录是空操作，不产生 (2) 副本', async () => {
+      const path = await repo.create('a', '笔记')
+
+      expect(await repo.move(path, 'a')).toBe(path)
+      expect(await fs.exists(path)).toBe(true)
+      expect(await fs.exists('a/笔记 (2).md')).toBe(false)
+    })
   })
 
   describe('duplicate', () => {

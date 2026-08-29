@@ -28,9 +28,8 @@ import { isDescendant } from '@/core/path'
 import type { TreeNode } from '@/core/workspace/types'
 import { cn } from '@/lib/utils'
 import { useI18nStore } from '@/stores/i18n'
+import { readTreeDrag, writeTreeDrag } from './drag-data'
 
-/** 拖拽载荷用自定义 MIME，避免把外部拖入的文本误当成内部移动 */
-const DRAG_TYPE = 'application/x-light-path'
 const i18n = useI18nStore()
 
 const props = defineProps<{
@@ -144,13 +143,14 @@ function activate(): void {
 // --- 拖拽 ---------------------------------------------------------------
 
 function onDragStart(event: DragEvent): void {
-  event.dataTransfer?.setData(DRAG_TYPE, props.node.path)
-  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
+  if (!event.dataTransfer) return
+  writeTreeDrag(event.dataTransfer, props.node.path)
+  event.dataTransfer.effectAllowed = 'move'
 }
 
 /** 只有文件夹能接收，且不能把目录拖进它自己的子树（否则路径成环） */
 function canAccept(event: DragEvent, position: 'inside' | 'before' | 'after'): boolean {
-  const source = event.dataTransfer?.getData(DRAG_TYPE)
+  const source = readTreeDrag(event.dataTransfer)
   if (position === 'inside' && !isFolder.value) return false
   // dragover 阶段多数浏览器读不到数据，此时先放行，drop 时再严格校验。
   if (!source) return position !== 'inside' || isFolder.value
@@ -181,7 +181,7 @@ function onDrop(event: DragEvent): void {
   dropActive.value = false
   const position = dropPosition.value ?? positionAt(event)
   dropPosition.value = null
-  const source = event.dataTransfer?.getData(DRAG_TYPE)
+  const source = readTreeDrag(event.dataTransfer)
   if (!source || !canAccept(event, position)) return
 
   event.preventDefault()
@@ -256,6 +256,7 @@ function onDrop(event: DragEvent): void {
         @trash="emit('trash', $event)"
         @properties="emit('properties', $event)"
         @favorite="emit('favorite', $event)"
+        @export="emit('export', $event)"
         @move="(source, target) => emit('move', source, target)"
         @reorder="(source, target, position) => emit('reorder', source, target, position)"
         @shift="(node, direction) => emit('shift', node, direction)"

@@ -5,7 +5,7 @@ import {
   readStringArray,
   stringifyDocument,
 } from '../markdown/frontmatter'
-import { dirname, stem } from '../path'
+import { dirname, normalizePath, stem } from '../path'
 import type { StorageAdapter } from '../storage'
 import { extensionFor, kindOf, type FileKind } from './tree'
 import { uniquePath } from './unique-path'
@@ -177,6 +177,10 @@ export class NoteRepository {
 
   /** 移动到另一目录，文件名不变；目标同名时同样走避让后缀 */
   async move(path: string, targetDir: string): Promise<string> {
+    // 拖回当前所在目录不是一次“产生新文件”的操作。必须在 uniquePath 之前返回，
+    // 否则源文件本身会被当成同名冲突，凭空改成 `文件 (2)`。
+    if (dirname(path) === normalizePath(targetDir)) return path
+
     const kind = kindOf(path)
     const ext = kind ? extensionFor(kind) : ''
     const target = await this.uniquePath(targetDir, stem(path), ext)

@@ -44,6 +44,19 @@ export async function hideCurrentWindow(): Promise<void> {
   await getCurrentWindow().hide()
 }
 
+/**
+ * 让原生托盘菜单跟随当前界面语言。
+ *
+ * 托盘属于 Rust 主进程，不在 Vue 的渲染树里；只改前端 locale 不会触碰它，
+ * 因此每次初始化或切换语言时显式同步。网页端没有托盘，直接为空操作。
+ */
+export async function syncTrayLocale(locale: 'zh-CN' | 'en-US'): Promise<void> {
+  if (!isDesktop()) return
+
+  const { invoke } = await import('@tauri-apps/api/core')
+  await invoke('set_tray_locale', { locale })
+}
+
 /** 当前窗口是否是速记胶囊。Rust 侧建窗时写入这个 query 参数。 */
 export function isCaptureWindow(): boolean {
   if (typeof window === 'undefined') return false

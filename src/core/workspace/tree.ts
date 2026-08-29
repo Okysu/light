@@ -4,7 +4,7 @@ import { normalizePath } from '../path'
 import { BOARD_EXT, CANVAS_EXT, LIGHT_DIR, NOTE_EXT, type NodeKind, type TreeNode } from './types'
 
 /** 不展示给用户的目录：Light 自有数据，以及其它工具的元数据目录 */
-const HIDDEN_DIRS = new Set([LIGHT_DIR, '.git', '.obsidian', '.trash', 'node_modules'])
+const HIDDEN_DIRS = new Set([LIGHT_DIR, '.light-sync', '.git', '.obsidian', '.trash', 'node_modules'])
 
 /** 文件类节点（目录不由扩展名判定） */
 export type FileKind = Exclude<NodeKind, 'folder'>

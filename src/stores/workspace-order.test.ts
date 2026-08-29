@@ -45,6 +45,17 @@ describe('workspace 侧边栏排序编排', () => {
     expect(await workspace.storage!.exists(source)).toBe(false)
   })
 
+  it('拖回所在目录时保持原路径且不制造同名副本', async () => {
+    const workspace = useWorkspaceStore()
+    await workspace.open({ kind: 'memory' })
+    const folder = await workspace.createFolder('', '项目')
+    const source = await workspace.createNote(folder, '来源')
+
+    expect(await workspace.move(source, folder)).toBe(source)
+    expect(await workspace.storage!.exists(source)).toBe(true)
+    expect(await workspace.storage!.exists('项目/来源 (2).md')).toBe(false)
+  })
+
   it('已排序条目改名后仍留在原位置', async () => {
     const workspace = useWorkspaceStore()
     await workspace.open({ kind: 'memory' })
