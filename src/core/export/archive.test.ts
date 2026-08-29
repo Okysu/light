@@ -16,6 +16,8 @@ describe('collectArchiveEntries', () => {
     await fs.writeText('.light/sync.json', '{"version":1,"bucket":"notes"}')
     await fs.writeText('.light/sync-state.json', '{"deviceId":"private"}')
     await fs.writeText('.light/trash/已删除.md', '# 已删除')
+    await fs.writeText('.light/extensions/demo/manifest.json', '{"version":1}')
+    await fs.writeText('.light/extensions/demo/main.js', 'void 0')
   })
 
   /**
@@ -33,6 +35,8 @@ describe('collectArchiveEntries', () => {
         '.light/properties.json',
         '.light/sync.json',
         '.light/workspace.json',
+        '.light/extensions/demo/manifest.json',
+        '.light/extensions/demo/main.js',
         '笔记.md',
         '项目/计划.md',
         '项目/归档/旧稿.md',
@@ -56,6 +60,12 @@ describe('collectArchiveEntries', () => {
     const result = paths(await collectArchiveEntries(fs))
     expect(result.has('.light/sync.json')).toBe(true)
     expect(result.has('.light/sync-state.json')).toBe(false)
+  })
+
+  it('扩展代码作为 Vault 内容随整库导出', async () => {
+    const result = paths(await collectArchiveEntries(fs))
+    expect(result.has('.light/extensions/demo/manifest.json')).toBe(true)
+    expect(result.has('.light/extensions/demo/main.js')).toBe(true)
   })
 
   it('指定单篇时只收那一篇', async () => {

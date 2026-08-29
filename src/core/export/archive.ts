@@ -97,7 +97,20 @@ async function configPaths(storage: StorageAdapter): Promise<string[]> {
     if (await storage.exists(path)) existing.push(path)
   }
 
+  // 扩展代码与非敏感配置本就是 Vault 的一部分。设备授权、启用状态和 secret
+  // 存在应用本地存储中，不会被这里带走。
+  if (await storage.exists('.light/extensions')) {
+    await collectInternalFiles(storage, '.light/extensions', existing)
+  }
+
   return existing
+}
+
+async function collectInternalFiles(storage: StorageAdapter, dir: string, output: string[]): Promise<void> {
+  for (const entry of await storage.list(dir)) {
+    if (entry.isDirectory) await collectInternalFiles(storage, entry.path, output)
+    else output.push(entry.path)
+  }
 }
 
 /** 打包成 ZIP 字节流 */

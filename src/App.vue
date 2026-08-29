@@ -42,6 +42,7 @@ import { useSecurityStore } from '@/stores/security'
 import { useI18nStore } from '@/stores/i18n'
 import ToastHost from '@/components/ui/toast/ToastHost.vue'
 import { useToastStore } from '@/stores/toast'
+import { useExtensionsStore } from '@/stores/extensions'
 import DesktopTitleBar from '@/features/desktop/DesktopTitleBar.vue'
 
 /**
@@ -71,6 +72,9 @@ const security = useSecurityStore()
 const i18n = useI18nStore()
 const toast = useToastStore()
 const exporter = useExportStore()
+const extensions = useExtensionsStore()
+
+extensions.initialize()
 
 workspace.onBeforeOpen(async () => {
   await Promise.all([editor.flush(), boardStore.flush(), canvasStore.flush()])
@@ -113,6 +117,7 @@ watch(() => sync.lastSyncedAt, (value, previous) => {
   // 同步 Store 已经重载活动文档；这里只作废可重建的派生缓存。
   // 若复用切目录逻辑，会把刚打开的看板/画板再次清空。
   if (value && value !== previous) invalidateSyncedCaches()
+  if (value && value !== previous) void extensions.load()
 })
 
 // 数据层仍保留 error 供设置页展示；顶层统一用 Toast 告知，避免错误藏在已关闭的面板里。

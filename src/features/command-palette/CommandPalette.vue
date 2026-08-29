@@ -21,6 +21,7 @@ import {
   Sparkles,
   Sun,
   Trash2,
+  Puzzle,
   type LucideIcon,
 } from 'lucide-vue-next'
 import { computed, nextTick, ref, watch } from 'vue'
@@ -42,6 +43,7 @@ import { useI18nStore } from '@/stores/i18n'
 import { SHORTCUT_BINDINGS } from '@/core/keyboard/bindings'
 import { formatShortcut, isMacPlatform, resolveShortcut } from '@/core/keyboard/shortcut'
 import { usePreferencesStore } from '@/stores/preferences'
+import { useExtensionsStore } from '@/stores/extensions'
 
 /**
  * 命令面板：**唯一**的搜索与命令入口。
@@ -74,6 +76,7 @@ const theme = useThemeStore()
 const search = useSearchStore()
 const i18n = useI18nStore()
 const preferences = usePreferencesStore()
+const extensions = useExtensionsStore()
 const isMac = isMacPlatform()
 const { prompt } = usePrompt()
 
@@ -166,6 +169,14 @@ const actions = computed<Entry[]>(() => {
     { id: 'action:theme', label: theme.isDark ? i18n.t('palette.themeLight') : i18n.t('palette.themeDark'), hint: command, icon: theme.isDark ? Sun : Moon, group: 'commands', run: () => theme.toggleDark() },
     { id: 'action:zen', label: ui.zenMode ? i18n.t('palette.zenExit') : i18n.t('palette.zenEnter'), hint: command, icon: Focus, group: 'commands', run: () => ui.toggleZen() },
     { id: 'action:outline', label: ui.outlineVisible ? i18n.t('palette.outlineHide') : i18n.t('palette.outlineShow'), hint: command, icon: Columns2, group: 'commands', run: () => { ui.outlineVisible = !ui.outlineVisible } },
+    ...extensions.commands.map((extensionCommand) => ({
+      id: `extension:${extensionCommand.id}`,
+      label: extensionCommand.title,
+      hint: extensions.items.find((item) => item.extension.manifest.id === extensionCommand.extensionId)?.extension.manifest.name ?? i18n.t('settings.extensions'),
+      icon: Puzzle,
+      group: 'commands' as const,
+      run: () => extensions.invoke(extensionCommand.extensionId, extensionCommand.command),
+    })),
   ]
 })
 

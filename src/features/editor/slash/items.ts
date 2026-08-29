@@ -11,7 +11,7 @@ import {
   wrapInOrderedListCommand,
 } from '@milkdown/kit/preset/commonmark'
 import { insertTableCommand } from '@milkdown/kit/preset/gfm'
-import { Image as ImageIcon, Music, Video, Columns3, Palette } from 'lucide-vue-next'
+import { Image as ImageIcon, Music, Video, Columns3, Palette, Puzzle } from 'lucide-vue-next'
 import { insertMathBlockCommand } from '../extensions/math'
 import { insertDocumentEmbedCommand } from '../extensions/document-embed'
 import {
@@ -32,6 +32,8 @@ import {
 } from 'lucide-vue-next'
 
 import { useEditorStore } from '@/stores/editor'
+import { useExtensionsStore } from '@/stores/extensions'
+import type { ExtensionSlashItem } from '@/core/extensions/types'
 
 export interface SlashItem {
   id: string
@@ -286,8 +288,22 @@ export const AI_SLASH_ITEMS: SlashItem[] = [
  *
  * @param includeAi AI 未启用时不列出 AI 条目
  */
-export function filterSlashItems(query: string, includeAi = false): SlashItem[] {
-  const all = includeAi ? [...AI_SLASH_ITEMS, ...SLASH_ITEMS] : SLASH_ITEMS
+export function filterSlashItems(
+  query: string,
+  includeAi = false,
+  contributions: readonly ExtensionSlashItem[] = [],
+): SlashItem[] {
+  const extensionItems: SlashItem[] = contributions.map((item) => ({
+    id: `extension:${item.id}`,
+    label: item.title,
+    group: item.group,
+    icon: Puzzle,
+    keywords: item.keywords,
+    run: () => { void useExtensionsStore().invoke(item.extensionId, item.command) },
+  }))
+  const all = includeAi
+    ? [...AI_SLASH_ITEMS, ...SLASH_ITEMS, ...extensionItems]
+    : [...SLASH_ITEMS, ...extensionItems]
   const keyword = query.trim().toLowerCase()
   if (!keyword) return all
 

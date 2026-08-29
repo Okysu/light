@@ -6,6 +6,7 @@ import {
   type AutocompleteTrigger,
 } from '../autocomplete/controller'
 import { useAiStore } from '@/stores/ai'
+import { useExtensionsStore } from '@/stores/extensions'
 import { filterSlashItems, type SlashItem } from './items'
 
 export type SlashController = AutocompleteController<SlashItem>
@@ -39,7 +40,11 @@ export function createSlashController(): SlashController {
     detect,
     // 每次都读一遍开关而不是缓存：用户在设置里开了 AI 之后，
     // 不该还要重开一次笔记才能在 / 菜单里看到它
-    items: (query) => filterSlashItems(query, useAiStore().settings.enabled),
+    items: (query) => filterSlashItems(
+      query,
+      useAiStore().settings.enabled,
+      useExtensionsStore().slashItems,
+    ),
     apply: (ctx, _view, item) => item.run(ctx),
   })
 }

@@ -12,6 +12,7 @@ import {
   Trash2,
   Wrench,
   Shield,
+  Puzzle,
 } from 'lucide-vue-next'
 import type { Component } from 'vue'
 import { computed, reactive, ref } from 'vue'
@@ -31,6 +32,7 @@ import SyncSection from './sections/SyncSection.vue'
 import TrashSection from './sections/TrashSection.vue'
 import WorkspaceSection from './sections/WorkspaceSection.vue'
 import SecuritySection from './sections/SecuritySection.vue'
+import ExtensionsSection from './sections/ExtensionsSection.vue'
 import { useI18nStore } from '@/stores/i18n'
 
 const ui = useUiStore()
@@ -62,6 +64,7 @@ const GROUPS = computed<Array<{ id: string; title: string; hint: string; pages: 
       { id: 'editor', label: i18n.t('settings.editor'), icon: PencilLine, component: EditorSection },
       { id: 'shortcuts', label: i18n.t('settings.shortcuts'), icon: Keyboard, component: ShortcutsSection },
       { id: 'security', label: i18n.t('settings.security'), icon: Shield, component: SecuritySection },
+      { id: 'extensions', label: i18n.t('settings.extensions'), icon: Puzzle, component: ExtensionsSection },
       // AI 归「应用」而不是「库」：API Key 是这台设备的凭据，
       // 跟着数据目录走就意味着它会被同步到网盘、被打进导出的压缩包
       { id: 'ai', label: i18n.t('settings.ai'), icon: Sparkles, component: AiSection },
