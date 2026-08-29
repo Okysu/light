@@ -59,7 +59,9 @@ jobs:
           - label: Windows x64
             platform: windows-latest
             rust_target: ''
-            args: --bundles nsis,msi
+            # WiX/MSI only accepts numeric pre-release identifiers. NSIS keeps
+            # the public tag and the in-app version exactly aligned (for example 0.0.1-rc).
+            args: --bundles nsis
 
     runs-on: ${{ matrix.platform }}
     steps:
