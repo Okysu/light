@@ -10,6 +10,7 @@ import { useEditorStore } from '@/stores/editor'
 import { documentHtml, writeToClipboard } from '@/core/clipboard/copy-document'
 import { useI18nStore } from '@/stores/i18n'
 import { useAiScenarioI18n } from '@/composables/use-ai-scenario-i18n'
+import { positionInScrollContainer } from './selection-position'
 
 /**
  * 划词 AI 工具条。
@@ -73,8 +74,12 @@ async function place(): Promise<void> {
   }
 
   const base = props.container.getBoundingClientRect()
-  const center = (rect.left + rect.right) / 2 - base.left
-  const top = rect.top - base.top
+  const { left: center, top } = positionInScrollContainer(
+    rect,
+    base,
+    props.container.scrollLeft,
+    props.container.scrollTop,
+  )
 
   // 先摆上去再量宽度：工具条要渲染出来才知道自己多宽
   anchor.value = { left: center, top }
@@ -84,9 +89,9 @@ async function place(): Promise<void> {
   if (width === 0) return
 
   const half = width / 2
-  const min = half + EDGE_PADDING
+  const min = props.container.scrollLeft + half + EDGE_PADDING
   // 容器比工具条还窄时 max 会小于 min，此时以 min 为准，宁可右边溢出
-  const max = Math.max(min, base.width - half - EDGE_PADDING)
+  const max = Math.max(min, props.container.scrollLeft + base.width - half - EDGE_PADDING)
 
   anchor.value = { left: Math.min(Math.max(center, min), max), top }
 }

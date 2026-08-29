@@ -1,5 +1,8 @@
 import { fileURLToPath, URL } from 'node:url'
+import { createRequire } from 'node:module'
 import { defineConfig } from 'vitest/config'
+
+const { version } = createRequire(import.meta.url)('./package.json') as { version: string }
 
 /**
  * 测试配置独立于 vite.config.ts。
@@ -9,6 +12,9 @@ import { defineConfig } from 'vitest/config'
  * 这里只保留测试真正需要的路径别名，不引入构建插件，从根上避开该冲突。
  */
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(version),
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

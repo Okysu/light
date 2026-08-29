@@ -7,14 +7,12 @@ import { useSearchStore } from '@/stores/search'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { flattenTree } from '@/core/workspace/tree'
 import { useI18nStore } from '@/stores/i18n'
+import { APP_VERSION } from '@/core/app-metadata'
 
 const workspace = useWorkspaceStore()
 const search = useSearchStore()
 const links = useLinksStore()
 const i18n = useI18nStore()
-
-/** 由 Vite 在构建时注入，避免把版本号写死在两个地方 */
-const version = __APP_VERSION__
 
 const isDesktop = computed(() => workspace.runtime === 'desktop')
 
@@ -64,7 +62,7 @@ const stats = computed(() => [
         <p class="text-xs text-muted-foreground">{{ i18n.t('about.tagline') }}</p>
       </div>
       <span class="ml-auto shrink-0 rounded-md border border-border px-2 py-0.5 font-mono text-xs text-muted-foreground">
-        v{{ version }}
+        v{{ APP_VERSION }}
       </span>
     </div>
 

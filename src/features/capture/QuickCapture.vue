@@ -108,7 +108,7 @@ function onKeydown(event: KeyboardEvent): void {
     <textarea
       ref="input"
       v-model="text"
-      class="min-h-0 flex-1 resize-none bg-transparent px-3 py-2 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
+      class="light-capture-input m-1 min-h-0 flex-1 resize-none rounded-md bg-transparent px-3 py-2 text-sm leading-relaxed placeholder:text-muted-foreground"
       :placeholder="i18n.t('capture.placeholder')"
       @keydown="onKeydown"
     />
@@ -123,3 +123,13 @@ function onKeydown(event: KeyboardEvent): void {
     <ToastHost />
   </div>
 </template>
+
+<style scoped>
+/* 全局键盘焦点框使用外描边；速记输入框贴近小窗边缘，外描边会被窗口裁切。
+   这里改为等价的内描边，既保留键盘可见焦点，也不会被左右边界吃掉。 */
+.light-capture-input:focus,
+.light-capture-input:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--ring);
+}
+</style>
