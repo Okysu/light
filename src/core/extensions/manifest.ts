@@ -4,6 +4,7 @@ import {
   type ExtensionManifest,
   type ExtensionPermission,
   type ExtensionSettingDefinition,
+  type ExtensionSettingValue,
 } from './types'
 
 const ID_PATTERN = /^[a-z0-9](?:[a-z0-9._-]{1,62}[a-z0-9])?$/
@@ -30,7 +31,7 @@ export function parseExtensionManifest(source: unknown): ExtensionManifest {
 
   const permissions = parsePermissions(value.permissions)
   const settings = value.settings === undefined ? undefined : parseSettings(value.settings)
-  const contributes = value.contributes === undefined ? undefined : parseContributes(value.contributes)
+  const contributes = value.contributes === undefined ? undefined : parseContributes(value.contributes, settings ?? {})
 
   return {
     version: 1,
@@ -83,15 +84,49 @@ function parseSettings(source: unknown): Record<string, ExtensionSettingDefiniti
     const description = optionalString(definition.description, `settings.${key}.description`, 240)
     const options = type === 'select' ? parseOptions(definition.options, key) : undefined
     const fallback = parseDefault(definition.default, type, key)
+    const placeholder = optionalString(definition.placeholder, `settings.${key}.placeholder`, 160)
+    const min = optionalFiniteNumber(definition.min, `settings.${key}.min`)
+    const max = optionalFiniteNumber(definition.max, `settings.${key}.max`)
+    if (min !== undefined && max !== undefined && min > max) fail(`settings.${key}.min 不能大于 max`)
+    const visibleWhen = definition.visibleWhen === undefined ? undefined : parseCondition(definition.visibleWhen, key)
     output[key] = {
       type: type as ExtensionSettingDefinition['type'],
       label,
       ...(description ? { description } : {}),
       ...(fallback !== undefined ? { default: fallback } : {}),
       ...(options ? { options } : {}),
+      ...(placeholder ? { placeholder } : {}),
+      ...(min !== undefined ? { min } : {}),
+      ...(max !== undefined ? { max } : {}),
+      ...(visibleWhen ? { visibleWhen } : {}),
+    }
+    if (type === 'select' && fallback !== undefined && fallback !== null && !options?.some((option) => option.value === fallback)) {
+      fail(`settings.${key}.default 不在 options 中`)
+    }
+    if (typeof fallback === 'number' && min !== undefined && fallback < min) fail(`settings.${key}.default 不能小于 min`)
+    if (typeof fallback === 'number' && max !== undefined && fallback > max) fail(`settings.${key}.default 不能大于 max`)
+  }
+  for (const [key, definition] of Object.entries(output)) {
+    const condition = definition.visibleWhen
+    if (!condition) continue
+    const dependency = output[condition.key]
+    if (!dependency) fail(`设置 ${key} 的 visibleWhen 引用了未声明设置：${condition.key}`)
+    if (!settingValueMatches(dependency.type, condition.equals)) {
+      fail(`设置 ${key} 的 visibleWhen.equals 类型与 ${condition.key} 不匹配`)
     }
   }
   return output
+}
+
+function parseCondition(source: unknown, key: string) {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) fail(`settings.${key}.visibleWhen 必须是对象`)
+  const value = source as Record<string, unknown>
+  const equals = value.equals
+  if (!isSettingValue(equals)) fail(`settings.${key}.visibleWhen.equals 不是有效设置值`)
+  return {
+    key: requiredString(value.key, `settings.${key}.visibleWhen.key`, 64),
+    equals,
+  }
 }
 
 function parseOptions(source: unknown, key: string): Array<{ label: string; value: string }> {
@@ -116,13 +151,67 @@ function parseDefault(source: unknown, type: string, key: string): string | numb
   return source as string | number | boolean
 }
 
-function parseContributes(source: unknown): ExtensionManifest['contributes'] {
+function parseContributes(
+  source: unknown,
+  settingDefinitions: Record<string, ExtensionSettingDefinition>,
+): ExtensionManifest['contributes'] {
   if (!source || typeof source !== 'object' || Array.isArray(source)) fail('contributes 必须是对象')
   const value = source as Record<string, unknown>
   const commands = value.commands === undefined ? undefined : parseCommands(value.commands)
   const commandIds = new Set(commands?.map((item) => item.id) ?? [])
   const slash = value.slash === undefined ? undefined : parseSlash(value.slash, commandIds)
-  return { ...(commands ? { commands } : {}), ...(slash ? { slash } : {}) }
+  const settings = value.settings === undefined
+    ? undefined
+    : parseSettingsSections(value.settings, commandIds, new Set(Object.keys(settingDefinitions)))
+  return {
+    ...(commands ? { commands } : {}),
+    ...(slash ? { slash } : {}),
+    ...(settings ? { settings } : {}),
+  }
+}
+
+function parseSettingsSections(source: unknown, commands: Set<string>, settingKeys: Set<string>) {
+  if (!Array.isArray(source)) fail('contributes.settings 必须是数组')
+  const ids = new Set<string>()
+  return source.map((raw, index) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) fail(`contributes.settings.${index} 必须是对象`)
+    const value = raw as Record<string, unknown>
+    const id = requiredString(value.id, `contributes.settings.${index}.id`, 64)
+    if (!CONTRIBUTION_ID_PATTERN.test(id) || ids.has(id)) fail(`无效或重复的设置区块 id：${id}`)
+    ids.add(id)
+    const fields = stringArray(value.fields, `contributes.settings.${index}.fields`)
+    for (const field of fields) {
+      if (!settingKeys.has(field)) fail(`设置区块 ${id} 引用了未声明设置：${field}`)
+    }
+    const actions = value.actions === undefined ? undefined : parseSettingsActions(value.actions, id, commands)
+    const description = optionalString(value.description, `contributes.settings.${index}.description`, 240)
+    return {
+      id,
+      title: requiredString(value.title, `contributes.settings.${index}.title`, 80),
+      ...(description ? { description } : {}),
+      fields,
+      ...(actions ? { actions } : {}),
+    }
+  })
+}
+
+function parseSettingsActions(source: unknown, sectionId: string, commands: Set<string>) {
+  if (!Array.isArray(source)) fail(`设置区块 ${sectionId} 的 actions 必须是数组`)
+  return source.map((raw, index) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) fail(`设置区块 ${sectionId} 的 action.${index} 必须是对象`)
+    const value = raw as Record<string, unknown>
+    const command = requiredString(value.command, `settings.${sectionId}.actions.${index}.command`, 64)
+    if (!commands.has(command)) fail(`设置区块 ${sectionId} 引用了未声明命令：${command}`)
+    const variant = value.variant === undefined ? undefined : requiredString(value.variant, `settings.${sectionId}.actions.${index}.variant`, 20)
+    if (variant && !['default', 'outline', 'destructive'].includes(variant)) fail(`设置区块 ${sectionId} 使用了无效按钮样式`)
+    const description = optionalString(value.description, `settings.${sectionId}.actions.${index}.description`, 200)
+    return {
+      command,
+      title: requiredString(value.title, `settings.${sectionId}.actions.${index}.title`, 80),
+      ...(description ? { description } : {}),
+      ...(variant ? { variant: variant as 'default' | 'outline' | 'destructive' } : {}),
+    }
+  })
 }
 
 function parseCommands(source: unknown) {
@@ -174,6 +263,24 @@ function optionalString(source: unknown, field: string, max: number): string | u
   if (source === undefined) return undefined
   if (typeof source !== 'string' || source.length > max) fail(`${field} 不能超过 ${max} 个字符`)
   return source.trim() || undefined
+}
+
+function optionalFiniteNumber(source: unknown, field: string): number | undefined {
+  if (source === undefined) return undefined
+  if (typeof source !== 'number' || !Number.isFinite(source)) fail(`${field} 必须是有限数字`)
+  return source
+}
+
+function isSettingValue(value: unknown): value is ExtensionSettingValue {
+  return value === null || typeof value === 'string' || typeof value === 'boolean'
+    || (typeof value === 'number' && Number.isFinite(value))
+}
+
+function settingValueMatches(type: ExtensionSettingDefinition['type'], value: ExtensionSettingValue): boolean {
+  if (value === null) return true
+  if (type === 'boolean') return typeof value === 'boolean'
+  if (type === 'number') return typeof value === 'number'
+  return typeof value === 'string'
 }
 
 function fail(message: string): never {

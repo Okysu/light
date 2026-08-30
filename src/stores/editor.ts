@@ -219,6 +219,17 @@ export const useEditorStore = defineStore('editor', () => {
     schedule()
   }
 
+  /** 由受权限控制的扩展等整篇替换场景使用，并立即让编辑器重建。 */
+  function replaceContent(markdown: string): void {
+    if (!note.value || markdown === fullContent.value) return
+    const { title, body } = splitTitle(markdown)
+    docTitle.value = title
+    draft.value = body
+    dirty.value = true
+    contentRevision.value += 1
+    schedule()
+  }
+
   function schedule(): void {
     // 每次调度都重新读延迟：用户在设置里改完，下一次输入就该按新值走
     autosave.schedule(preferences.autosaveDelay)
@@ -429,6 +440,7 @@ export const useEditorStore = defineStore('editor', () => {
     openNote,
     updateContent,
     updateTitle,
+    replaceContent,
     setProperty,
     save,
     flush,

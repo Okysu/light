@@ -14,6 +14,8 @@ import { useI18nStore } from '@/stores/i18n'
 import { useThemeStore } from '@/stores/theme'
 import { useToastStore, type ToastKind } from '@/stores/toast'
 import { useWorkspaceStore } from '@/stores/workspace'
+import { usePrompt } from '@/composables/use-prompt'
+import { useConfirm } from '@/composables/use-confirm'
 
 interface ExtensionHostOptions {
   extension: InstalledExtension
@@ -25,8 +27,12 @@ interface ExtensionHostOptions {
 
 const METHOD_PERMISSIONS: Record<string, ExtensionDeviceState['granted'][number] | undefined> = {
   'workspace.list': 'workspace:read',
+  'workspace.exists': 'workspace:read',
+  'workspace.open': 'workspace:read',
+  'workspace.refresh': 'workspace:read',
   'workspace.readText': 'workspace:read',
   'workspace.search': 'workspace:read',
+  'workspace.mkdir': 'workspace:write',
   'workspace.writeText': 'workspace:write',
   'workspace.trash': 'workspace:delete',
   'document.getActive': 'document:read',
@@ -34,6 +40,7 @@ const METHOD_PERMISSIONS: Record<string, ExtensionDeviceState['granted'][number]
   'document.getSelection': 'document:read',
   'document.replaceSelection': 'document:write',
   'document.insertAfterSelection': 'document:write',
+  'document.replaceText': 'document:write',
   'ai.complete': 'ai:invoke',
 }
 
@@ -44,6 +51,8 @@ export function createExtensionHost(options: ExtensionHostOptions) {
   const toast = useToastStore()
   const i18n = useI18nStore()
   const theme = useThemeStore()
+  const { prompt } = usePrompt()
+  const { confirm } = useConfirm()
   let search: SearchService | null = null
 
   return async (method: string, args: unknown): Promise<unknown> => {
@@ -96,6 +105,23 @@ export function createExtensionHost(options: ExtensionHostOptions) {
         toast.show(message, kind as ToastKind)
         return null
       }
+      case 'ui.prompt':
+        return prompt({
+          title: stringArg(value, 'title', 120),
+          description: optionalStringArg(value.description, 500),
+          defaultValue: optionalStringArg(value.defaultValue, 100_000),
+          confirmLabel: optionalStringArg(value.confirmLabel, 40),
+          placeholder: optionalStringArg(value.placeholder, 160),
+          multiline: value.multiline === true,
+        })
+      case 'ui.confirm':
+        return confirm({
+          title: stringArg(value, 'title', 120),
+          description: optionalStringArg(value.description, 500),
+          confirmLabel: optionalStringArg(value.confirmLabel, 40),
+          cancelLabel: optionalStringArg(value.cancelLabel, 40),
+          danger: value.danger === true,
+        })
       case 'workspace.list': {
         const storage = requireStorage(workspace.storage)
         const path = safeExtensionWorkspacePath(value.path, true)
@@ -105,15 +131,28 @@ export function createExtensionHost(options: ExtensionHostOptions) {
           directory: entry.isDirectory,
         }))
       }
+      case 'workspace.exists':
+        return requireStorage(workspace.storage).exists(safeExtensionWorkspacePath(value.path))
+      case 'workspace.mkdir': {
+        const path = safeExtensionWorkspacePath(value.path)
+        await requireStorage(workspace.storage).mkdir(path)
+        if (value.refresh !== false) await workspace.refresh()
+        return null
+      }
       case 'workspace.readText':
         return requireStorage(workspace.storage).readText(safeExtensionWorkspacePath(value.path))
       case 'workspace.writeText': {
         const path = safeExtensionWorkspacePath(value.path)
         const contents = stringArg(value, 'contents', 2_000_000, true)
         await requireStorage(workspace.storage).writeText(path, contents)
-        await workspace.refresh()
+        if (value.refresh !== false) await workspace.refresh()
         return null
       }
+      case 'workspace.open':
+        return editor.openNote(safeExtensionWorkspacePath(value.path))
+      case 'workspace.refresh':
+        await workspace.refresh()
+        return null
       case 'workspace.trash':
         await workspace.moveToTrash(safeExtensionWorkspacePath(value.path))
         return null
@@ -144,6 +183,11 @@ export function createExtensionHost(options: ExtensionHostOptions) {
       case 'document.insertAfterSelection':
         ensureActiveDocument(editor.activePath)
         editor.selectionBridge?.insertAfter(stringArg(value, 'markdown', 1_000_000, true))
+        return null
+      case 'document.replaceText':
+        ensureActiveDocument(editor.activePath)
+        editor.replaceContent(stringArg(value, 'markdown', 2_000_000, true))
+        await editor.flush()
         return null
       case 'ai.isAvailable':
         return ai.ready
@@ -176,6 +220,12 @@ function validateSetting(extension: InstalledExtension, key: string, value: unkn
   if (typeof value === 'string' && value.length > 100_000) throw new Error(`设置项 ${key} 的内容过长`)
   if (definition.type === 'select' && !definition.options?.some((option) => option.value === value)) {
     throw new Error(`设置项 ${key} 的值不在候选项中`)
+  }
+  if (typeof value === 'number' && definition.min !== undefined && value < definition.min) {
+    throw new Error(`设置项 ${key} 不能小于 ${definition.min}`)
+  }
+  if (typeof value === 'number' && definition.max !== undefined && value > definition.max) {
+    throw new Error(`设置项 ${key} 不能大于 ${definition.max}`)
   }
   return value as ExtensionSettingValue
 }
@@ -225,6 +275,12 @@ function stringArg(args: Record<string, unknown>, key: string, max: number, allo
 
 function numberArg(value: unknown, fallback: number, min: number, max: number): number {
   return typeof value === 'number' && Number.isSafeInteger(value) ? Math.min(max, Math.max(min, value)) : fallback
+}
+
+function optionalStringArg(value: unknown, max: number): string | undefined {
+  if (value === undefined || value === null || value === '') return undefined
+  if (typeof value !== 'string' || value.length > max) throw new Error(`可选字符串不能超过 ${max} 字符`)
+  return value
 }
 
 function requireStorage<T>(storage: T | null): T {

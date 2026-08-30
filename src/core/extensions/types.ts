@@ -15,12 +15,36 @@ export type ExtensionPermission = (typeof EXTENSION_PERMISSIONS)[number]
 export type ExtensionSettingType = 'boolean' | 'text' | 'textarea' | 'number' | 'select' | 'secret'
 export type ExtensionSettingValue = string | number | boolean | null
 
+export interface ExtensionSettingCondition {
+  key: string
+  equals: ExtensionSettingValue
+}
+
 export interface ExtensionSettingDefinition {
   type: ExtensionSettingType
   label: string
   description?: string
   default?: ExtensionSettingValue
   options?: Array<{ label: string; value: string }>
+  placeholder?: string
+  min?: number
+  max?: number
+  visibleWhen?: ExtensionSettingCondition
+}
+
+export interface ExtensionSettingsActionContribution {
+  command: string
+  title: string
+  description?: string
+  variant?: 'default' | 'outline' | 'destructive'
+}
+
+export interface ExtensionSettingsSectionContribution {
+  id: string
+  title: string
+  description?: string
+  fields: string[]
+  actions?: ExtensionSettingsActionContribution[]
 }
 
 export interface ExtensionCommandContribution {
@@ -48,6 +72,7 @@ export interface ExtensionManifest {
   contributes?: {
     commands?: ExtensionCommandContribution[]
     slash?: ExtensionSlashContribution[]
+    settings?: ExtensionSettingsSectionContribution[]
   }
 }
 
@@ -56,6 +81,7 @@ export interface InstalledExtension {
   source: string
   sourceHash: string
   settings: Record<string, ExtensionSettingValue>
+  builtin?: boolean
 }
 
 export interface ExtensionDeviceState {

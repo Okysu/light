@@ -1,6 +1,7 @@
 import { computed, ref, shallowRef, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { ExtensionContributions } from '@/core/extensions/contributions'
+import { ensureBuiltinExtensions, isBuiltinExtension, markBuiltin } from '@/core/extensions/builtins'
 import { ExtensionDeviceStateStore, hasAllPermissions } from '@/core/extensions/device-state'
 import { createExtensionHost } from '@/core/extensions/host'
 import { ExtensionRepository } from '@/core/extensions/repository'
@@ -34,7 +35,7 @@ export const useExtensionsStore = defineStore('extensions', () => {
   const revision = ref(0)
   const repository = shallowRef<ExtensionRepository | null>(null)
   const deviceState = shallowRef<ExtensionDeviceStateStore | null>(null)
-  const contributions = new ExtensionContributions()
+  const contributions = new ExtensionContributions(() => i18n.locale)
   const sandboxes = new Map<string, ExtensionSandbox>()
   const secretValues = new Map<string, string>()
   let initialized = false
@@ -77,8 +78,9 @@ export const useExtensionsStore = defineStore('extensions', () => {
     try {
       repository.value = new ExtensionRepository(workspace.storage)
       deviceState.value = new ExtensionDeviceStateStore(workspaceKey())
+      await ensureBuiltinExtensions(repository.value)
       const installed = await repository.value.list()
-      items.value = installed.map((extension) => {
+      items.value = installed.map(markBuiltin).map((extension) => {
         const device = deviceState.value!.read(extension.manifest.id, extension.sourceHash)
         return {
           extension,
@@ -106,6 +108,7 @@ export const useExtensionsStore = defineStore('extensions', () => {
   }
 
   async function install(manifest: ExtensionManifest, source: string): Promise<void> {
+    if (isBuiltinExtension(manifest.id)) throw new Error('官方内置扩展不能被脚本覆盖')
     const repo = requireRepository()
     await stop(manifest.id)
     await repo.install(manifest, source)
@@ -113,6 +116,7 @@ export const useExtensionsStore = defineStore('extensions', () => {
   }
 
   async function uninstall(id: string): Promise<void> {
+    if (isBuiltinExtension(id)) throw new Error('官方内置扩展不能删除，只能停用')
     await stop(id)
     await requireRepository().remove(id)
     deviceState.value?.remove(id)

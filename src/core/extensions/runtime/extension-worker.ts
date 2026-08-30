@@ -217,6 +217,11 @@ globalThis.light = __freeze({
       if (typeof id !== 'string' || typeof handler !== 'function') throw new TypeError('commands.handle 参数无效')
       globalThis.__lightHandlers[id] = handler
     },
+    invokeLocal: async (id, args = null) => {
+      const handler = globalThis.__lightHandlers[id]
+      if (typeof handler !== 'function') throw new Error('命令没有注册处理函数：' + id)
+      return handler(args)
+    },
   }),
   events: __freeze({
     on: (name, handler) => {
@@ -229,11 +234,19 @@ globalThis.light = __freeze({
       }
     },
   }),
-  ui: __freeze({ showToast: (options) => __call('ui.showToast', options) }),
+  ui: __freeze({
+    showToast: (options) => __call('ui.showToast', options),
+    prompt: (options) => __call('ui.prompt', options),
+    confirm: (options) => __call('ui.confirm', options),
+  }),
   workspace: __freeze({
     list: (path = '') => __call('workspace.list', { path }),
+    exists: (path) => __call('workspace.exists', { path }),
+    mkdir: (path, options = {}) => __call('workspace.mkdir', { path, ...options }),
     readText: (path) => __call('workspace.readText', { path }),
-    writeText: (path, contents) => __call('workspace.writeText', { path, contents }),
+    writeText: (path, contents, options = {}) => __call('workspace.writeText', { path, contents, ...options }),
+    open: (path) => __call('workspace.open', { path }),
+    refresh: () => __call('workspace.refresh'),
     trash: (path) => __call('workspace.trash', { path }),
     search: (query, options = {}) => __call('workspace.search', { query, ...options }),
   }),
@@ -243,6 +256,7 @@ globalThis.light = __freeze({
     getSelection: () => __call('document.getSelection'),
     replaceSelection: (markdown) => __call('document.replaceSelection', { markdown }),
     insertAfterSelection: (markdown) => __call('document.insertAfterSelection', { markdown }),
+    replaceText: (markdown) => __call('document.replaceText', { markdown }),
   }),
   ai: __freeze({
     isAvailable: () => __call('ai.isAvailable'),

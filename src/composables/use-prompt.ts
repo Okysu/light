@@ -5,6 +5,8 @@ interface PromptRequest {
   description?: string
   defaultValue: string
   confirmLabel: string
+  placeholder: string
+  multiline: boolean
 }
 
 /**
@@ -23,6 +25,8 @@ export function usePrompt() {
     description?: string
     defaultValue?: string
     confirmLabel?: string
+    placeholder?: string
+    multiline?: boolean
   }): Promise<string | null> {
     // 前一个对话框未关闭时先兑现为取消，避免 Promise 永久挂起
     resolver?.(null)
@@ -32,6 +36,8 @@ export function usePrompt() {
       description: options.description ?? '',
       defaultValue: options.defaultValue ?? '',
       confirmLabel: options.confirmLabel ?? '确定',
+      placeholder: options.placeholder ?? '',
+      multiline: options.multiline ?? false,
     }
     value.value = options.defaultValue ?? ''
 
