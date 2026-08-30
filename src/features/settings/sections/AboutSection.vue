@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { FileText, HardDrive, Monitor, Package } from 'lucide-vue-next'
+import { FileText, HardDrive, Monitor, Package, Scale } from 'lucide-vue-next'
 import { computed } from 'vue'
 import { Separator } from '@/components/ui/separator'
 import { useLinksStore } from '@/stores/links'
@@ -79,6 +79,12 @@ const stats = computed(() => [
         <component :is="item.icon" class="size-4 shrink-0 text-muted-foreground" />
         <span class="text-muted-foreground">{{ item.label }}</span>
         <span class="ml-auto">{{ item.value }}</span>
+      </div>
+
+      <div class="flex items-center gap-2 text-sm">
+        <Scale class="size-4 shrink-0 text-muted-foreground" />
+        <span class="text-muted-foreground">{{ i18n.t('about.license') }}</span>
+        <span class="ml-auto font-mono text-xs">AGPL-3.0-only</span>
       </div>
     </div>
 

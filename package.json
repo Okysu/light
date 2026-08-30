@@ -5,6 +5,8 @@
   "packageManager": "pnpm@10.30.0",
   "type": "module",
   "description": "Light — 本地优先的轻量知识库：Markdown 笔记 / 看板 / 画板",
+  "license": "AGPL-3.0-only",
+  "repository": "https://github.com/Okysu/light",
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",

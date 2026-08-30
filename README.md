@@ -98,3 +98,6 @@ Unknown frontmatter fields are preserved, so files remain friendly to other Mark
 
 `package.json` is the single source of truth for the user-facing and Tauri bundle version. A semantic-version tag such as `0.0.1-rc` triggers tests and native builds for Windows, Linux, macOS Apple Silicon, and macOS Intel, then publishes the artifacts to GitHub Releases.
 
+## License
+
+Copyright © 2026 Light contributors. Light is licensed under the [GNU Affero General Public License v3.0](LICENSE) (`AGPL-3.0-only`).

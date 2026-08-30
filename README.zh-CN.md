@@ -96,3 +96,6 @@ pnpm dev
 
 `package.json` 是界面与 Tauri 安装包版本的唯一来源。推送类似 `0.0.1-rc` 的语义化版本 Tag 后，流水线会运行测试，并构建 Windows、Linux、macOS Apple Silicon 与 macOS Intel 版本，最后上传至 GitHub Releases。
 
+## 许可证
+
+Copyright © 2026 Light contributors。Light 使用 [GNU Affero General Public License v3.0](LICENSE)（`AGPL-3.0-only`）发布。

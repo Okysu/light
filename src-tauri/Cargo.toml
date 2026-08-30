@@ -3,8 +3,8 @@ name = "light"
 version = "0.0.1"
 description = "Light — 本地优先的轻量知识库"
 authors = ["Light"]
-license = ""
-repository = ""
+license = "AGPL-3.0-only"
+repository = "https://github.com/Okysu/light"
 edition = "2021"
 rust-version = "1.77.2"
 
