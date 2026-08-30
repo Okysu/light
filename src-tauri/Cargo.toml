@@ -1,6 +1,6 @@
 [package]
 name = "light"
-version = "0.0.1-rc.1"
+version = "0.0.1"
 description = "Light — 本地优先的轻量知识库"
 authors = ["Light"]
 license = ""
