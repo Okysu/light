@@ -15,7 +15,7 @@ import {
   Puzzle,
 } from 'lucide-vue-next'
 import type { Component } from 'vue'
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Dialog } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -33,18 +33,33 @@ import TrashSection from './sections/TrashSection.vue'
 import WorkspaceSection from './sections/WorkspaceSection.vue'
 import SecuritySection from './sections/SecuritySection.vue'
 import ExtensionsSection from './sections/ExtensionsSection.vue'
+import ExtensionSettingsPage from './sections/ExtensionSettingsPage.vue'
 import { useI18nStore } from '@/stores/i18n'
+import { useExtensionsStore } from '@/stores/extensions'
+import { builtinName } from '@/core/extensions/builtins'
 
 const ui = useUiStore()
 const workspace = useWorkspaceStore()
 const i18n = useI18nStore()
+const extensions = useExtensionsStore()
 
 interface SettingsPage {
   id: string
   label: string
   icon: Component
   component: Component
+  props?: Record<string, unknown>
 }
+
+const extensionPages = computed<SettingsPage[]>(() => extensions.items
+  .filter((item) => item.device.enabled && (item.extension.manifest.contributes?.settings?.length ?? 0) > 0)
+  .map((item) => ({
+    id: `extension:${item.extension.manifest.id}`,
+    label: builtinName(item.extension, i18n.locale),
+    icon: Puzzle,
+    component: ExtensionSettingsPage,
+    props: { extensionId: item.extension.manifest.id },
+  })))
 
 /**
  * 分组按**归属对象**划分，这是这个面板最重要的一条线：
@@ -54,8 +69,8 @@ interface SettingsPage {
  * 「库」类进 `.light/`。混了会出两种坏结果：主题写进数据目录会让两台设备
  * 互相覆盖对方的偏好；同步凭据写进 localStorage 则换台设备就得重配。
  */
-const GROUPS = computed<Array<{ id: string; title: string; hint: string; pages: SettingsPage[] }>>(() => [
-  {
+const GROUPS = computed<Array<{ id: string; title: string; hint: string; pages: SettingsPage[] }>>(() => {
+  const groups: Array<{ id: string; title: string; hint: string; pages: SettingsPage[] }> = [{
     id: 'app',
     title: i18n.t('settings.app'),
     hint: i18n.t('settings.appHint'),
@@ -64,14 +79,22 @@ const GROUPS = computed<Array<{ id: string; title: string; hint: string; pages: 
       { id: 'editor', label: i18n.t('settings.editor'), icon: PencilLine, component: EditorSection },
       { id: 'shortcuts', label: i18n.t('settings.shortcuts'), icon: Keyboard, component: ShortcutsSection },
       { id: 'security', label: i18n.t('settings.security'), icon: Shield, component: SecuritySection },
-      { id: 'extensions', label: i18n.t('settings.extensions'), icon: Puzzle, component: ExtensionsSection },
+      { id: 'extensions', label: i18n.t('settings.extensionManagement'), icon: Puzzle, component: ExtensionsSection },
       // AI 归「应用」而不是「库」：API Key 是这台设备的凭据，
       // 跟着数据目录走就意味着它会被同步到网盘、被打进导出的压缩包
       { id: 'ai', label: i18n.t('settings.ai'), icon: Sparkles, component: AiSection },
       { id: 'about', label: i18n.t('settings.about'), icon: Info, component: AboutSection },
     ],
-  },
-  {
+  }]
+  if (extensionPages.value.length > 0) {
+    groups.push({
+      id: 'extension-pages',
+      title: i18n.t('settings.extensions'),
+      hint: i18n.t('settings.extensionsHint'),
+      pages: extensionPages.value,
+    })
+  }
+  groups.push({
     id: 'workspace',
     title: i18n.t('settings.data'),
     hint: i18n.t('settings.dataHint'),
@@ -82,8 +105,9 @@ const GROUPS = computed<Array<{ id: string; title: string; hint: string; pages: 
       { id: 'trash', label: i18n.t('settings.trash'), icon: Trash2, component: TrashSection },
       { id: 'sync', label: i18n.t('settings.sync'), icon: Cloud, component: SyncSection },
     ],
-  },
-])
+  })
+  return groups
+})
 
 const activeId = ref('appearance')
 
@@ -91,6 +115,13 @@ const activeId = ref('appearance')
 const expanded = reactive<Record<string, boolean>>(
   Object.fromEntries(GROUPS.value.map((group) => [group.id, true])),
 )
+
+watch(GROUPS, (groups) => {
+  for (const group of groups) {
+    if (expanded[group.id] === undefined) expanded[group.id] = true
+  }
+  if (!groups.some((group) => group.pages.some((page) => page.id === activeId.value))) activeId.value = 'extensions'
+}, { immediate: true })
 
 const activePage = computed(
   () => GROUPS.value.flatMap((group) => group.pages).find((page) => page.id === activeId.value) ?? null,
@@ -156,7 +187,7 @@ function isDisabled(groupId: string): boolean {
 
         <ScrollArea class="min-h-0 flex-1" viewport-class="px-5 py-4">
           <!-- key 绑定页面 id：切页时重建，避免上一页的临时输入残留到下一页 -->
-          <component :is="activePage.component" v-if="activePage" :key="activePage.id" />
+          <component :is="activePage.component" v-if="activePage" :key="activePage.id" v-bind="activePage.props" />
         </ScrollArea>
       </div>
     </div>

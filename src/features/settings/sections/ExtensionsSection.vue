@@ -2,20 +2,12 @@
 import { BadgeCheck, Code2, FilePlus2, Play, RefreshCw, ShieldCheck, Trash2 } from 'lucide-vue-next'
 import { computed, onMounted, ref, watch } from 'vue'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { useConfirm } from '@/composables/use-confirm'
 import { parseExtensionManifest } from '@/core/extensions/manifest'
-import { builtinDescription, builtinName, builtinText } from '@/core/extensions/builtins'
-import type {
-  ExtensionRuntimeState,
-  ExtensionSettingDefinition,
-  ExtensionSettingValue,
-  ExtensionSettingsActionContribution,
-  ExtensionSettingsSectionContribution,
-} from '@/core/extensions/types'
+import { builtinDescription, builtinName } from '@/core/extensions/builtins'
+import type { ExtensionRuntimeState } from '@/core/extensions/types'
 import { permissionLabels, useExtensionsStore } from '@/stores/extensions'
 import { useI18nStore } from '@/stores/i18n'
 import { useToastStore } from '@/stores/toast'
@@ -30,17 +22,8 @@ const manifestText = ref('')
 const sourceText = ref('')
 const editingNew = ref(false)
 const saving = ref(false)
-const runningAction = ref<string | null>(null)
 
 const selected = computed(() => extensions.items.find((item) => item.extension.manifest.id === selectedId.value) ?? null)
-const settingsSections = computed<ExtensionSettingsSectionContribution[]>(() => {
-  const item = selected.value
-  if (!item) return []
-  const declared = item.extension.manifest.contributes?.settings
-  if (declared?.length) return declared
-  const fields = Object.keys(item.extension.manifest.settings ?? {})
-  return fields.length ? [{ id: 'default', title: i18n.t('extensions.configuration'), fields }] : []
-})
 
 onMounted(() => {
   if (!selectedId.value && extensions.items[0]) selectExtension(extensions.items[0])
@@ -115,26 +98,6 @@ async function removeSelected(): Promise<void> {
   toast.success(i18n.t('extensions.deleted'))
 }
 
-async function runAction(action: ExtensionSettingsActionContribution): Promise<void> {
-  const item = selected.value
-  if (!item || item.status !== 'active') return
-  runningAction.value = action.command
-  try {
-    await extensions.invoke(item.extension.manifest.id, action.command)
-  } catch {
-    // Store 已经统一记录日志并显示错误 Toast。
-  } finally {
-    runningAction.value = null
-  }
-}
-
-async function changeSetting(key: string, definition: ExtensionSettingDefinition, value: unknown): Promise<void> {
-  if (!selected.value) return
-  let next: ExtensionSettingValue = value as ExtensionSettingValue
-  if (definition.type === 'number') next = Number(value)
-  await extensions.updateSetting(selected.value.extension.manifest.id, key, next)
-}
-
 function statusLabel(status: ExtensionRuntimeState['status']): string {
   return i18n.t(`extensions.status.${status}` as Parameters<typeof i18n.t>[0])
 }
@@ -152,41 +115,6 @@ function displayDescription(item: ExtensionRuntimeState): string | undefined {
   return builtinDescription(item.extension, i18n.locale)
 }
 
-function settingLabel(key: string, definition: ExtensionSettingDefinition): string {
-  const id = selected.value?.extension.manifest.id ?? ''
-  return builtinText(id, i18n.locale, `setting.${key}`, definition.label)
-}
-
-function settingDescription(key: string, definition: ExtensionSettingDefinition): string | undefined {
-  if (!selected.value?.extension.builtin) return definition.description
-  return builtinText(selected.value.extension.manifest.id, i18n.locale, `setting.${key}.description`, '') || undefined
-}
-
-function optionLabel(key: string, value: string, fallback: string): string {
-  const id = selected.value?.extension.manifest.id ?? ''
-  return builtinText(id, i18n.locale, `option.${key}.${value}`, fallback)
-}
-
-function sectionTitle(section: ExtensionSettingsSectionContribution): string {
-  const id = selected.value?.extension.manifest.id ?? ''
-  return builtinText(id, i18n.locale, `section.${section.id}`, section.title)
-}
-
-function sectionDescription(section: ExtensionSettingsSectionContribution): string | undefined {
-  const id = selected.value?.extension.manifest.id ?? ''
-  return builtinText(id, i18n.locale, `section.${section.id}.description`, section.description ?? '') || undefined
-}
-
-function actionTitle(action: ExtensionSettingsActionContribution): string {
-  const id = selected.value?.extension.manifest.id ?? ''
-  return builtinText(id, i18n.locale, `action.${action.command}`, action.title)
-}
-
-function fieldVisible(definition: ExtensionSettingDefinition): boolean {
-  const item = selected.value
-  if (!item || !definition.visibleWhen) return true
-  return extensions.settingValue(item.extension.manifest.id, definition.visibleWhen.key) === definition.visibleWhen.equals
-}
 </script>
 
 <template>
@@ -287,83 +215,11 @@ light.ai.isAvailable() / complete({ instruction, input })</pre>
         </Button>
       </SettingRow>
 
-      <SettingRow
-        v-if="selected.device.enabled && settingsSections.length"
-        :label="i18n.t('extensions.configuration')"
-        :description="i18n.t('extensions.configurationHint')"
+      <div
+        v-if="selected.device.enabled && (selected.extension.manifest.contributes?.settings?.length ?? 0) > 0"
+        class="rounded-md border border-dashed p-3 text-xs leading-relaxed text-muted-foreground"
       >
-        <div class="space-y-3">
-          <section v-for="section in settingsSections" :key="section.id" class="space-y-4 rounded-md border p-3">
-            <div>
-              <h4 class="text-sm font-medium">{{ sectionTitle(section) }}</h4>
-              <p v-if="sectionDescription(section)" class="mt-1 text-xs leading-relaxed text-muted-foreground">{{ sectionDescription(section) }}</p>
-            </div>
-
-            <template v-for="key in section.fields" :key="key">
-              <div v-if="selected.extension.manifest.settings?.[key] && fieldVisible(selected.extension.manifest.settings[key])" class="space-y-1.5">
-                <div class="flex items-center justify-between gap-3">
-                  <div class="min-w-0">
-                    <Label :for="`extension-setting-${section.id}-${key}`">{{ settingLabel(key, selected.extension.manifest.settings[key]) }}</Label>
-                    <p v-if="settingDescription(key, selected.extension.manifest.settings[key])" class="text-xs text-muted-foreground">
-                      {{ settingDescription(key, selected.extension.manifest.settings[key]) }}
-                    </p>
-                  </div>
-                  <Switch
-                    v-if="selected.extension.manifest.settings[key].type === 'boolean'"
-                    :id="`extension-setting-${section.id}-${key}`"
-                    :model-value="Boolean(extensions.settingValue(selected.extension.manifest.id, key))"
-                    @update:model-value="changeSetting(key, selected.extension.manifest.settings![key]!, Boolean($event))"
-                  />
-                </div>
-                <Textarea
-                  v-if="selected.extension.manifest.settings[key].type === 'textarea'"
-                  :id="`extension-setting-${section.id}-${key}`"
-                  :model-value="String(extensions.settingValue(selected.extension.manifest.id, key) ?? '')"
-                  :placeholder="selected.extension.manifest.settings[key].placeholder"
-                  @change="changeSetting(key, selected.extension.manifest.settings![key]!, ($event.target as HTMLTextAreaElement).value)"
-                />
-                <Input
-                  v-else-if="['text', 'number', 'secret'].includes(selected.extension.manifest.settings[key].type)"
-                  :id="`extension-setting-${section.id}-${key}`"
-                  :type="selected.extension.manifest.settings[key].type === 'secret' ? 'password' : selected.extension.manifest.settings[key].type"
-                  :model-value="String(extensions.settingValue(selected.extension.manifest.id, key) ?? '')"
-                  :placeholder="selected.extension.manifest.settings[key].placeholder"
-                  :min="selected.extension.manifest.settings[key].min"
-                  :max="selected.extension.manifest.settings[key].max"
-                  @change="changeSetting(key, selected.extension.manifest.settings![key]!, ($event.target as HTMLInputElement).value)"
-                />
-                <select
-                  v-else-if="selected.extension.manifest.settings[key].type === 'select'"
-                  :id="`extension-setting-${section.id}-${key}`"
-                  class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                  :value="String(extensions.settingValue(selected.extension.manifest.id, key) ?? '')"
-                  @change="changeSetting(key, selected.extension.manifest.settings![key]!, ($event.target as HTMLSelectElement).value)"
-                >
-                  <option v-for="option in selected.extension.manifest.settings[key].options" :key="option.value" :value="option.value">
-                    {{ optionLabel(key, option.value, option.label) }}
-                  </option>
-                </select>
-              </div>
-            </template>
-
-            <div v-if="section.actions?.length" class="flex flex-wrap gap-2 border-t pt-3">
-              <Button
-                v-for="action in section.actions"
-                :key="action.command"
-                size="sm"
-                :variant="action.variant ?? 'default'"
-                :disabled="selected.status !== 'active' || runningAction !== null"
-                @click="runAction(action)"
-              >
-                {{ runningAction === action.command ? i18n.t('extensions.running') : actionTitle(action) }}
-              </Button>
-            </div>
-          </section>
-        </div>
-      </SettingRow>
-
-      <div v-else-if="settingsSections.length && !selected.device.enabled" class="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-        {{ i18n.t('extensions.enableForGui') }}
+        {{ i18n.t('extensions.guiInSidebar') }}
       </div>
 
       <SettingRow :label="i18n.t('extensions.logs')" :description="i18n.t('extensions.logsHint')">
