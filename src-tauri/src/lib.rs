@@ -2,6 +2,9 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
+mod workspace_scope;
+use workspace_scope::allow_workspace_scope;
+
 /// 速记窗口的 label。前端靠 `?window=capture` 判断自己该渲染哪一套界面。
 const CAPTURE_LABEL: &str = "capture";
 const MAIN_LABEL: &str = "main";
@@ -73,10 +76,7 @@ fn set_tray_locale(locale: String, items: tauri::State<'_, TrayMenuItems>) -> Re
 /// 只放行用户明确选中的那一个目录（递归包含子目录），不做更大范围的授权。
 #[tauri::command]
 fn allow_workspace(app: AppHandle, path: String) -> Result<(), String> {
-    let scope = app.fs_scope();
-
-    scope
-        .allow_directory(&path, true)
+    allow_workspace_scope(&app.fs_scope(), std::path::Path::new(&path))
         .map_err(|error| format!("无法授权目录 {path}：{error}"))?;
 
     Ok(())
@@ -93,8 +93,7 @@ use tauri_plugin_fs::FsExt;
 fn prepare_data_dir(app: AppHandle, path: String) -> Result<(), String> {
     std::fs::create_dir_all(&path).map_err(|error| format!("无法创建目录 {path}：{error}"))?;
 
-    app.fs_scope()
-        .allow_directory(&path, true)
+    allow_workspace_scope(&app.fs_scope(), std::path::Path::new(&path))
         .map_err(|error| format!("无法授权目录 {path}：{error}"))?;
 
     Ok(())
@@ -127,8 +126,7 @@ async fn import_path(
         let target_path = std::path::Path::new(&target);
 
         // 目标要先放行，否则前端随后刷新文件树时读不到刚导入的内容
-        app.fs_scope()
-            .allow_directory(target_path, true)
+        allow_workspace_scope(&app.fs_scope(), target_path)
             .map_err(|error| format!("无法授权目录：{error}"))?;
 
         std::fs::create_dir_all(target_path).map_err(|error| format!("无法创建目录：{error}"))?;
@@ -320,10 +318,12 @@ fn selftest_scope(app: &AppHandle) {
 
     let scope = app.fs_scope();
     let before = scope.is_allowed(&probe);
-    let granted = scope.allow_directory(&probe, true).is_ok();
+    let granted = allow_workspace_scope(&scope, &probe).is_ok();
     let after = scope.is_allowed(&probe);
+    let metadata = scope.is_allowed(probe.join(".light/workspace.json"));
+    let staging = scope.is_allowed(probe.join(".light-sync/staging/probe"));
 
-    log::info!("fs 作用域自检：授权前 allowed={before}，allow_directory ok={granted}，授权后 allowed={after}");
+    log::info!("fs 作用域自检：授权前 allowed={before}，授权 ok={granted}，授权后 allowed={after}，metadata={metadata}，staging={staging}");
     let _ = std::fs::remove_dir_all(&probe);
 }
 

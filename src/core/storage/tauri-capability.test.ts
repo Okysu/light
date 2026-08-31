@@ -15,10 +15,10 @@ interface TauriConfig {
 }
 
 describe('Tauri 文件系统 capability', () => {
-  it('Unix 上递归授权也覆盖 .light 等隐藏目录，但不静态放开全盘', () => {
+  it('静态 scope 配置允许隐藏项，但不静态放开全盘', () => {
     const path = join(process.cwd(), 'src-tauri', 'tauri.conf.json')
     const config = JSON.parse(readFileSync(path, 'utf8')) as TauriConfig
-    // fs 插件在 Unix 默认 true，在 Windows 默认 false；统一后才可跨平台初始化库。
+    // 这里只检查静态配置。动态授权的隐藏目录匹配由 Rust workspace_scope 测试验证。
     expect(config.plugins?.fs?.requireLiteralLeadingDot).toBe(false)
     const capability = JSON.parse(readFileSync(join(process.cwd(), 'src-tauri', 'capabilities', 'default.json'), 'utf8')) as Capability
     expect(capability.permissions?.every((permission) => typeof permission === 'string')).toBe(true)

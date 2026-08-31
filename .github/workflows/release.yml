@@ -89,6 +89,25 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Unix 的动态 fs scope 默认排除隐藏子目录；必须测试真正的 Rust matcher，
+      # 仅检查 tauri.conf.json 或只在 Windows 上构建无法防止这个回归。
+      - name: Test native filesystem scope
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib --test workspace_scope
+
+      - name: Read versioned release notes
+        id: release-notes
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+          const version = process.env.GITHUB_REF_NAME;
+          const path = `.github/release-notes/${version}.md`;
+          const body = existsSync(path)
+            ? readFileSync(path, 'utf8')
+            : `Light ${version} desktop release.\n\nThese binaries are not code-signed yet.`;
+          appendFileSync(process.env.GITHUB_OUTPUT, `body<<LIGHT_RELEASE_NOTES\n${body}\nLIGHT_RELEASE_NOTES\n`);
+          NODE
+
       - name: Build and publish release assets
         uses: tauri-apps/tauri-action@v1
         env:
@@ -97,11 +116,8 @@ jobs:
         with:
           tauriScript: pnpm tauri
           tagName: ${{ github.ref_name }}
-          releaseName: Light ${{ github.ref_name }}
-          releaseBody: |
-            Light ${{ github.ref_name }} pre-release builds.
-
-            These binaries are not code-signed yet. On macOS, you may need to allow the app in Privacy & Security on first launch.
+          releaseName: Light v${{ github.ref_name }}
+          releaseBody: ${{ steps.release-notes.outputs.body }}
           releaseDraft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
           generateReleaseNotes: true
