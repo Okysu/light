@@ -15,10 +15,10 @@ import { SLASH_ITEMS, filterSlashItems } from './items'
  * 类型检查与「菜单能弹出」都发现不了，只有真的把每一条都执行一遍才能拦住。
  */
 
-const editors: Array<{ destroy: () => void }> = []
+const editors: Array<{ destroy: () => Promise<unknown> }> = []
 
-afterEach(() => {
-  while (editors.length > 0) editors.pop()?.destroy()
+afterEach(async () => {
+  while (editors.length > 0) await editors.pop()?.destroy()
 })
 
 async function runItems(ids: string[], initial = '文字'): Promise<{ markdown: string; nodes: string[] }> {
@@ -26,7 +26,7 @@ async function runItems(ids: string[], initial = '文字'): Promise<{ markdown: 
   document.body.append(root)
 
   const editor = await createLightEditor({ root, defaultValue: initial }).create()
-  editors.push({ destroy: () => void editor.destroy() })
+  editors.push({ destroy: () => editor.destroy() })
 
   for (const id of ids) {
     const item = SLASH_ITEMS.find((candidate) => candidate.id === id)

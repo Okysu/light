@@ -9,9 +9,10 @@ import { Slice } from '@milkdown/kit/prose/model'
  * - 送给模型的如果是 `textBetween` 的纯文本，选中一段列表再润色，回来的
  *   结构就全没了；
  * - 而让 AI 层去认识 ProseMirror 节点，等于把编辑器实现泄漏到了一个
- *   本该只关心「一段文字进、一段文字出」的模块里。
+ *   独立处理 Markdown 与图片上下文的模块里。
  *
  * Markdown 恰好是两边都认的中间形态——它本来就是这个应用的真源。
+ * AI 请求层再将其中的图片引用读取为实际图片；源码不是完整的多模态请求。
  */
 
 export interface SelectionBridge {

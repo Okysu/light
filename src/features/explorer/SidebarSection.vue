@@ -26,6 +26,8 @@ const showCount = computed(() => !open.value && props.count !== undefined && pro
     <div class="flex items-center gap-1 px-2 py-1.5">
       <button
         type="button"
+        :aria-expanded="open"
+        :aria-controls="`sidebar-section-${id}`"
         class="flex min-w-0 flex-1 items-center gap-1 rounded-md border border-transparent px-1 py-0.5 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground"
         @click="open = !open"
       >
@@ -38,7 +40,7 @@ const showCount = computed(() => !open.value && props.count !== undefined && pro
       <slot name="actions" />
     </div>
 
-    <div v-if="open" class="min-h-0">
+    <div v-if="open" :id="`sidebar-section-${id}`" class="min-h-0">
       <slot />
     </div>
   </section>

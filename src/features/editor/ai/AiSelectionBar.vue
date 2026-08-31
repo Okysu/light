@@ -7,6 +7,7 @@ import { findScenario } from '@/core/ai/scenarios'
 import { isScenarioEnabled } from '@/core/ai/settings'
 import { useAiStore } from '@/stores/ai'
 import { useEditorStore } from '@/stores/editor'
+import { useWorkspaceStore } from '@/stores/workspace'
 import { documentHtml, writeToClipboard } from '@/core/clipboard/copy-document'
 import { useI18nStore } from '@/stores/i18n'
 import { useAiScenarioI18n } from '@/composables/use-ai-scenario-i18n'
@@ -28,6 +29,7 @@ import { positionInScrollContainer } from './selection-position'
 const props = defineProps<{ container: HTMLElement | null }>()
 
 const editor = useEditorStore()
+const workspace = useWorkspaceStore()
 const ai = useAiStore()
 const i18n = useI18nStore()
 const scenarioI18n = useAiScenarioI18n()
@@ -165,12 +167,14 @@ async function run(scenarioId: string | null): Promise<void> {
   if (!text.trim() && !instruction.value.trim()) return
 
   const stream = bridge.beginStream(scenario?.apply === 'insert' ? 'after' : 'replace')
+  // 与选区同时捕获，不能在异步读图后再从当前标签页推断相对路径。
+  const imageContext = { storage: workspace.storage, notePath: editor.activePath ?? '' }
 
   try {
     if (scenario) {
-      await ai.run(scenario.id, text, scenario.parameter?.options[0], (chunk) => stream.push(chunk))
+      await ai.run(scenario.id, text, scenario.parameter?.options[0], (chunk) => stream.push(chunk), imageContext)
     } else {
-      await ai.runInstruction(instruction.value, text, (chunk) => stream.push(chunk))
+      await ai.runInstruction(instruction.value, text, (chunk) => stream.push(chunk), imageContext)
     }
     stream.commit()
     dismiss()

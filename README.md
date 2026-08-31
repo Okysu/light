@@ -36,9 +36,10 @@ Light keeps knowledge portable. A note is a normal Markdown file on disk, not a 
 - Kanban boards with drag and drop, tags, deadlines, priorities, checklists, assignees, linked notes, filtering, and archiving.
 - Infinite canvas with shapes, arrows, freehand drawing, embedded notes and board cards, grouping, minimap, and PNG/SVG export.
 - Full-text Chinese-aware search, regular expressions, highlights, and a unified command palette (`Ctrl/⌘ + K`).
-- Attachment import by paste, drop, or slash command; reference tracking, orphan cleanup, and optional image OCR.
+- Attachment import by paste, drop, or slash command; opt-in local copies of pasted web images, reference tracking, orphan cleanup, and optional image OCR.
 - Markdown archive, PDF, and offline static-site export.
-- OpenAI, Anthropic, and OpenAI-compatible AI providers with locally encrypted API keys, streaming output, selection actions, and BYOK configuration.
+- OpenAI, Anthropic, and OpenAI-compatible AI providers with locally encrypted API keys, streaming output, text-and-image selection actions, and BYOK configuration.
+- Collapsible sidebar controls for settings, AI status, and S3 sync status with one-click sync.
 - Application lock, sensitive-note encryption, version history, trash, daily notes, theme presets, custom CSS, and configurable shortcuts.
 
 ## Platforms
@@ -88,6 +89,8 @@ pnpm dev
 | `pnpm typecheck` | Run Vue and TypeScript checks |
 
 ## Data location
+
+To keep pasted web images portable, enable **Settings → Editor → Download locally and replace external links**. Images are copied to `attachments/` and linked relatively. Downloads are limited to 20 MiB per image and require the source to allow CORS; failures keep the original link and show a notification.
 
 - **Desktop:** the folder selected by the user.
 - **Web:** browser-private OPFS storage. Use export or encrypted S3 sync for backup and portability.

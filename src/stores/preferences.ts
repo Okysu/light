@@ -21,6 +21,9 @@ export const usePreferencesStore = defineStore('preferences', () => {
   /** 编辑器拼写检查（13.2）。中文写作时红波浪线是干扰，因此可关。 */
   const spellcheck = useLocalStorage('light:spellcheck', true)
 
+  /** 粘贴富文本里的网络图片时，是否复制进当前 Vault 的 attachments/。 */
+  const localizeRemoteImages = useLocalStorage('light:localize-remote-images', false)
+
   /** 应用内快捷键覆盖项；跟随设备，不写入 Vault，也不参与 S3 同步。 */
   const shortcutOverrides = useLocalStorage<ShortcutOverrides>('light:shortcut-overrides', {})
 
@@ -41,6 +44,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
   return {
     autosaveDelay,
     spellcheck,
+    localizeRemoteImages,
     shortcutOverrides,
     setShortcut,
     resetShortcut,

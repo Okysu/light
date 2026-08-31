@@ -1,5 +1,7 @@
 import { imageSchema } from '@milkdown/kit/preset/commonmark'
+import { editorViewOptionsCtx } from '@milkdown/kit/core'
 import { Plugin, PluginKey } from '@milkdown/kit/prose/state'
+import { Fragment, Slice, type Node as ProseNode } from '@milkdown/kit/prose/model'
 import type { EditorView, NodeView } from '@milkdown/kit/prose/view'
 import { $prose, $view } from '@milkdown/kit/utils'
 import { embeddableKind, isInternalAttachment } from '@/core/attachments/attachment'
@@ -34,6 +36,11 @@ export interface AttachmentBridge {
    * 让调用方能绕开它释放，等于把那个 bug 的入口重新开出来。
    */
   release: (url: string) => void
+  /** 设备偏好在粘贴时读取，切换设置无需重建编辑器。 */
+  shouldLocalizeRemoteImages?: () => boolean
+  importRemoteImage?: (src: string, signal: AbortSignal) => Promise<string>
+  onRemoteImageImported?: () => void
+  onRemoteImageError?: (cause: unknown) => void
 }
 
 export const attachmentPluginKey = new PluginKey('LIGHT_ATTACHMENT')
@@ -50,10 +57,38 @@ function embeddableFilesOf(transfer: DataTransfer | null): File[] {
 }
 
 export function createAttachmentPlugin(bridge: AttachmentBridge) {
+  const controllers = new WeakMap<EditorView, AbortController>()
   return $prose(
-    () =>
-      new Plugin({
+    (ctx) => {
+      ctx.update(editorViewOptionsCtx, (prev) => ({
+        ...prev,
+        handlePaste: (view, event, slice) => {
+          if (bridge.shouldLocalizeRemoteImages?.() && bridge.importRemoteImage) {
+            const signal = controllers.get(view)?.signal
+            const before = view.state.doc
+            if (signal) void Promise.resolve().then(() => {
+              if (signal.aborted) return
+              // Markdown 纯文本会被 clipboard 插件在 transformPasted 之后重新解析。
+              // 观察实际插入的新节点，才能同时覆盖 HTML 与 Markdown，不碰原有图片。
+              const existing = new Set<ProseNode>()
+              before.descendants((node) => { existing.add(node) })
+              const inserted: ProseNode[] = []
+              view.state.doc.descendants((node) => {
+                if (node.type.name === 'image' && !existing.has(node)) inserted.push(node)
+              })
+              return localizePastedImages(view, new Slice(Fragment.fromArray(inserted), 0, 0), bridge, signal)
+            })
+          }
+          return prev.handlePaste?.call(view, view, event, slice) ?? false
+        },
+      }))
+      return new Plugin({
         key: attachmentPluginKey,
+        view: (view) => {
+          const controller = new AbortController()
+          controllers.set(view, controller)
+          return { destroy: () => controller.abort() }
+        },
         props: {
           handlePaste: (view, event) => handleFiles(view, embeddableFilesOf(event.clipboardData), bridge),
           handleDrop: (view, event) => {
@@ -61,7 +96,8 @@ export function createAttachmentPlugin(bridge: AttachmentBridge) {
             return handleFiles(view, embeddableFilesOf(dragEvent.dataTransfer), bridge, dragEvent)
           },
         },
-      }),
+      })
+    },
   )
 }
 
@@ -171,4 +207,45 @@ export function createAttachmentView(bridge: AttachmentBridge) {
 
 export function attachment(bridge: AttachmentBridge) {
   return [createAttachmentPlugin(bridge), createAttachmentView(bridge), createMediaView(bridge)].flat()
+}
+
+/** 只跟踪本次粘贴的节点身份；下载期间移动光标或编辑文字，不会改到别处的同名外链。 */
+export async function localizePastedImages(
+  view: EditorView,
+  slice: Slice,
+  bridge: AttachmentBridge,
+  signal: AbortSignal,
+): Promise<void> {
+  if (!bridge.importRemoteImage || signal.aborted) return
+  const groups = new Map<string, Set<ProseNode>>()
+  slice.content.descendants((node) => {
+    const src = node.attrs['src'] as string | undefined
+    if (node.type.name !== 'image' || !src || !/^https?:\/\//i.test(src)) return
+    const nodes = groups.get(src) ?? new Set<ProseNode>()
+    nodes.add(node)
+    groups.set(src, nodes)
+  })
+
+  for (const [src, targets] of groups) {
+    if (signal.aborted) return
+    let present = false
+    view.state.doc.descendants((node) => { if (targets.has(node)) present = true })
+    if (!present) continue
+    try {
+      const href = await bridge.importRemoteImage(src, signal)
+      if (signal.aborted) return
+      const transaction = view.state.tr
+      view.state.doc.descendants((node, pos) => {
+        if (targets.has(node)) transaction.setNodeMarkup(pos, undefined, { ...node.attrs, src: href })
+      })
+      if (transaction.docChanged) {
+        view.dispatch(transaction.setMeta('addToHistory', false))
+        bridge.onRemoteImageImported?.()
+      }
+    } catch (cause) {
+      if (signal.aborted) return
+      // 下载失败保留原外链；不能吞掉图片，也不能让未处理 rejection 打断后续图片。
+      bridge.onRemoteImageError?.(cause)
+    }
+  }
 }

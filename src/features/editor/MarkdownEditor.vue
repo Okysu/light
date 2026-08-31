@@ -17,6 +17,8 @@ import { useLinksStore } from '@/stores/links'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useI18nStore } from '@/stores/i18n'
+import { useToastStore } from '@/stores/toast'
+import { RemoteImageError } from '@/core/attachments/remote-image'
 import { createLightEditor } from './create-editor'
 import LinkMenu from './links/LinkMenu.vue'
 import SlashMenu from './slash/SlashMenu.vue'
@@ -36,6 +38,9 @@ const i18n = useI18nStore()
 const links = useLinksStore()
 const attachments = useAttachmentsStore()
 const workspace = useWorkspaceStore()
+const toast = useToastStore()
+// 编辑器实例随笔记重建；异步下载必须使用发起时的路径，而不是稍后激活的标签页。
+const notePath = store.activePath ?? ''
 
 const titleInput = ref<HTMLTextAreaElement | null>(null)
 
@@ -84,9 +89,17 @@ const { get } = useEditor((root) =>
     linkAutocomplete,
     // 附件的相对链接是**相对当前笔记**的，因此桥要闭包住笔记路径
     attachments: {
-      save: (data, mime, name) => attachments.save(data, mime, store.activePath ?? '', name),
-      resolve: (src) => attachments.resolve(src, store.activePath ?? ''),
+      save: (data, mime, name) => attachments.save(data, mime, notePath, name),
+      resolve: (src) => attachments.resolve(src, notePath),
       release: (url) => attachments.release(url),
+      shouldLocalizeRemoteImages: () => preferences.localizeRemoteImages,
+      importRemoteImage: (src, signal) => attachments.importRemoteImage(src, notePath, signal),
+      onRemoteImageImported: () => toast.success(i18n.t('editor.remoteImageImported')),
+      onRemoteImageError: (cause) => toast.error(i18n.t(
+        cause instanceof RemoteImageError && cause.reason === 'size'
+          ? 'editor.remoteImageTooLarge'
+          : 'editor.remoteImageFailed',
+      )),
     },
   }),
 )

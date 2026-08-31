@@ -3,6 +3,11 @@
   "productName": "Light",
   "version": "../package.json",
   "identifier": "app.light.desktop",
+  "plugins": {
+    "fs": {
+      "requireLiteralLeadingDot": false
+    }
+  },
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",

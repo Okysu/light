@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { editorViewCtx, serializerCtx } from '@milkdown/kit/core'
 import type { Ctx } from '@milkdown/kit/ctx'
-import { TextSelection } from '@milkdown/kit/prose/state'
+import { AllSelection, NodeSelection, TextSelection } from '@milkdown/kit/prose/state'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createLightEditor } from '../create-editor'
 import { createSelectionBridge } from './selection-bridge'
+import { imageSources, resolveImageContext, toBase64 } from '@/core/ai/image-context'
+import { MemoryAdapter } from '@/core/storage/memory-adapter'
 
 /**
  * 选区桥用**真实的编辑器实例**测，不是模拟对象。
@@ -14,10 +16,10 @@ import { createSelectionBridge } from './selection-bridge'
  * 一定会答错的地方：一个假的 view 让所有断言都通过，然后线上丢内容。
  */
 
-const editors: Array<{ destroy: () => void }> = []
+const editors: Array<{ destroy: () => Promise<unknown> }> = []
 
-afterEach(() => {
-  while (editors.length > 0) editors.pop()?.destroy()
+afterEach(async () => {
+  while (editors.length > 0) await editors.pop()?.destroy()
 })
 
 async function setup(markdown: string): Promise<{ ctx: Ctx; markdown: () => string }> {
@@ -25,7 +27,7 @@ async function setup(markdown: string): Promise<{ ctx: Ctx; markdown: () => stri
   document.body.append(root)
 
   const editor = await createLightEditor({ root, defaultValue: markdown }).create()
-  editors.push({ destroy: () => void editor.destroy() })
+  editors.push({ destroy: () => editor.destroy() })
 
   let captured: Ctx | null = null
   editor.action((ctx) => {
@@ -81,6 +83,28 @@ describe('selection（读取选区）', () => {
     cursorAtEndOf(ctx, 1)
 
     expect(createSelectionBridge(() => ctx).selection()).toBe('')
+  })
+
+  it('单独选中图片节点时能够生成实际图片上下文', async () => {
+    const { ctx } = await setup('![图](../attachments/a.png)\n\n![未选中](../attachments/missing.png)')
+    const view = ctx.get(editorViewCtx)
+    view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, 1)))
+    const selected = createSelectionBridge(() => ctx).selection()
+    expect(imageSources(selected)).toEqual(['../attachments/a.png'])
+    const storage = new MemoryAdapter()
+    const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
+    await storage.writeBinary('attachments/a.png', png)
+    expect(await resolveImageContext(selected, { storage, notePath: 'notes/a.md' }, new AbortController().signal))
+      .toEqual([{ mime: 'image/png', base64: toBase64(png) }])
+  })
+
+  it('混选列表与表格时保留其中所有图片引用', async () => {
+    const { ctx } = await setup('开头 ![A](a.png)\n\n- ![B](b.png)\n\n| 图 |\n| --- |\n| ![C](c.png) |')
+    const view = ctx.get(editorViewCtx)
+    view.dispatch(view.state.tr.setSelection(new AllSelection(view.state.doc)))
+    const selected = createSelectionBridge(() => ctx).selection()
+    expect(selected).toContain('开头')
+    expect(imageSources(selected)).toEqual(['a.png', 'b.png', 'c.png'])
   })
 })
 

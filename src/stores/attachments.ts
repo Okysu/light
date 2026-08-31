@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { shallowRef } from 'vue'
 import { AttachmentService } from '@/core/attachments/attachment-service'
 import { ATTACHMENTS_DIR } from '@/core/workspace/types'
+import { downloadRemoteImage } from '@/core/attachments/remote-image'
 import { useWorkspaceStore } from './workspace'
 
 /**
@@ -37,6 +38,16 @@ export const useAttachmentsStore = defineStore('attachments', () => {
     const { path, href } = await instance.save(data, mime, notePath, name)
     // 刚存进去的文件马上就要显示，顺手把 URL 备好
     urls.delete(path)
+    return href
+  }
+
+  /** 下载网络图片并保存，返回替换原外链所需的相对 href。 */
+  async function importRemoteImage(src: string, notePath: string, signal?: AbortSignal): Promise<string> {
+    const instance = ensureService()
+    if (!instance) throw new Error('尚未打开工作区')
+    const downloaded = await downloadRemoteImage(src, signal)
+    signal?.throwIfAborted()
+    const { href } = await instance.save(downloaded.data, downloaded.mime, notePath, downloaded.name)
     return href
   }
 
@@ -93,5 +104,5 @@ export const useAttachmentsStore = defineStore('attachments', () => {
     service.value = null
   }
 
-  return { save, resolve, release, invalidate }
+  return { save, importRemoteImage, resolve, release, invalidate }
 })

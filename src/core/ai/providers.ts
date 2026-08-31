@@ -26,31 +26,31 @@ import {
  * 纯文本消息保持字符串形式——有些兼容端点只认字符串，不认数组。
  */
 function toOpenAiMessage(message: ChatMessage): unknown {
-  if (!message.image) return { role: message.role, content: message.content }
+  if (!message.images?.length) return { role: message.role, content: message.content }
 
   return {
     role: message.role,
     content: [
       { type: 'text', text: message.content },
-      {
+      ...message.images.map((image) => ({
         type: 'image_url',
-        image_url: { url: `data:${message.image.mime};base64,${message.image.base64}` },
-      },
+        image_url: { url: `data:${image.mime};base64,${image.base64}` },
+      })),
     ],
   }
 }
 
 /** Anthropic 的多模态消息：图片是独立的 block，且要拆出 media_type */
 function toAnthropicMessage(message: ChatMessage): unknown {
-  if (!message.image) return { role: message.role, content: message.content }
+  if (!message.images?.length) return { role: message.role, content: message.content }
 
   return {
     role: message.role,
     content: [
-      {
+      ...message.images.map((image) => ({
         type: 'image',
-        source: { type: 'base64', media_type: message.image.mime, data: message.image.base64 },
-      },
+        source: { type: 'base64', media_type: image.mime, data: image.base64 },
+      })),
       { type: 'text', text: message.content },
     ],
   }

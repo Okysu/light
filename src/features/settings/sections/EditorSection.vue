@@ -48,5 +48,14 @@ const DELAYS = computed(() => [
         <Switch id="spellcheck" v-model="preferences.spellcheck" />
       </div>
     </SettingRow>
+
+    <SettingRow :label="i18n.t('editor.remoteImages')" :description="i18n.t('editor.remoteImagesHint')">
+      <div class="flex w-full items-center justify-between gap-3">
+        <Label for="localize-remote-images" class="cursor-pointer font-normal">
+          {{ i18n.t('editor.localizeRemoteImages') }}
+        </Label>
+        <Switch id="localize-remote-images" v-model="preferences.localizeRemoteImages" />
+      </div>
+    </SettingRow>
   </div>
 </template>

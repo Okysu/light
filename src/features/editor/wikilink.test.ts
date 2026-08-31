@@ -12,10 +12,10 @@ import { WIKILINK } from './extensions/wikilink'
  * 所以每个用例都同时检查文档结构。
  */
 
-const editors: Array<{ destroy: () => void }> = []
+const editors: Array<{ destroy: () => Promise<unknown> }> = []
 
-afterEach(() => {
-  while (editors.length > 0) editors.pop()?.destroy()
+afterEach(async () => {
+  while (editors.length > 0) await editors.pop()?.destroy()
 })
 
 async function open(markdown: string) {
@@ -23,7 +23,7 @@ async function open(markdown: string) {
   document.body.append(root)
 
   const editor = await createLightEditor({ root, defaultValue: markdown }).create()
-  editors.push({ destroy: () => void editor.destroy() })
+  editors.push({ destroy: () => editor.destroy() })
 
   return editor.action((ctx) => {
     const view = ctx.get(editorViewCtx)

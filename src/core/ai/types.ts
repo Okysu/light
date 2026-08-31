@@ -17,17 +17,22 @@ export interface ProviderConfig {
   model: string
 }
 
+export interface ChatImage {
+  mime: string
+  base64: string
+}
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
   content: string
   /**
-   * 随消息一起发送的图片（6.3 的 OCR / 图片描述）。
+   * 随消息一起发送的图片（选区 / 整篇笔记 / OCR）。
    *
    * 存 base64 而不是 URL：图片就在用户本地，没有可供服务商访问的地址。
    * 两家的多模态消息结构不同，转换放在各自的 provider 里——
-   * 这里只表达「这条消息附了一张图」这个事实。
+   * 这里只表达「这条消息附了哪些图」这个事实。
    */
-  image?: { mime: string; base64: string }
+  images?: ChatImage[]
 }
 
 /** 一次流式调用的参数 */

@@ -202,7 +202,7 @@ describe('图片消息（6.3 的 OCR / 图片描述）', () => {
   function imageRequest(kind: 'openai' | 'anthropic'): StreamRequest {
     return {
       ...request({ kind }),
-      messages: [{ role: 'user', content: '提取文字', image: IMAGE }],
+      messages: [{ role: 'user', content: '提取文字', images: [IMAGE] }],
     }
   }
 
@@ -235,6 +235,22 @@ describe('图片消息（6.3 的 OCR / 图片描述）', () => {
     expect(body()['messages']).toEqual([
       { role: 'system', content: '规则' },
       { role: 'user', content: '你好' },
+    ])
+  })
+
+  it.each(['openai', 'anthropic', 'custom'] as const)('%s 保留多张图片的顺序，不丢失第二张图', async (kind) => {
+    mockFetch(new Response(sse(['data: [DONE]\n\n'])))
+    const images = [IMAGE, { mime: 'image/jpeg', base64: 'c2Vjb25k' }]
+    await collect(providerFor(kind).stream({ ...request({ kind }), messages: [{ role: 'user', content: '对比两张图', images }] }))
+    const content = (body()['messages'] as Array<{ content: unknown[] }>)[0]!.content
+    expect(content).toEqual(kind === 'anthropic' ? [
+      { type: 'image', source: { type: 'base64', media_type: 'image/png', data: IMAGE.base64 } },
+      { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'c2Vjb25k' } },
+      { type: 'text', text: '对比两张图' },
+    ] : [
+      { type: 'text', text: '对比两张图' },
+      { type: 'image_url', image_url: { url: `data:image/png;base64,${IMAGE.base64}` } },
+      { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,c2Vjb25k' } },
     ])
   })
 })

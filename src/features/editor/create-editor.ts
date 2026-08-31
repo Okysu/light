@@ -4,7 +4,7 @@ import { Editor, defaultValueCtx, editorViewOptionsCtx, rootCtx } from '@milkdow
 import { clipboard } from '@milkdown/kit/plugin/clipboard'
 import { cursor } from '@milkdown/kit/plugin/cursor'
 import { history } from '@milkdown/kit/plugin/history'
-import { listener, listenerCtx } from '@milkdown/kit/plugin/listener'
+import { listener } from '@milkdown/kit/plugin/listener'
 import { trailing } from '@milkdown/kit/plugin/trailing'
 import { commonmark } from '@milkdown/kit/preset/commonmark'
 import { gfm } from '@milkdown/kit/preset/gfm'
@@ -14,6 +14,7 @@ import { highlight } from './extensions/highlight'
 import { documentEmbed } from './extensions/document-embed'
 import { math } from './extensions/math'
 import { media } from './extensions/media'
+import { markdownListener } from './extensions/markdown-listener'
 import { sanitizePastedHtml } from './extensions/paste-sanitizer'
 import { rawFallback } from './extensions/raw-node'
 import { wikilink } from './extensions/wikilink'
@@ -61,12 +62,6 @@ export function createLightEditor(options: CreateEditorOptions): Editor {
           sanitizePastedHtml(prev.transformPastedHTML?.(html, view) ?? html),
       }))
 
-      if (options.onMarkdownUpdated) {
-        ctx.get(listenerCtx).markdownUpdated((_, markdown, prevMarkdown) => {
-          if (markdown !== prevMarkdown) options.onMarkdownUpdated!(markdown)
-        })
-      }
-
       configureCodeBlock(ctx)
       options.slash?.configure(ctx)
       options.linkAutocomplete?.configure(ctx)
@@ -91,6 +86,7 @@ export function createLightEditor(options: CreateEditorOptions): Editor {
 
   // 附件在兜底之后：只替换图片与媒体的 NodeView，不引入新 schema
   if (options.attachments) editor.use(attachment(options.attachments))
+  if (options.onMarkdownUpdated) editor.use(markdownListener(options.onMarkdownUpdated))
 
   // 斜杠命令与链接补全注册在兜底之后：它们只挂 ProseMirror 插件，
   // 不引入 schema，因此不影响「首个匹配者胜出」的顺序

@@ -13,10 +13,10 @@ import { createLightEditor } from './create-editor'
  * 用真实的编辑器实例而非模拟对象，测的就是线上跑的那套插件组合。
  */
 
-const editors: Array<{ destroy: () => void }> = []
+const editors: Array<{ destroy: () => Promise<unknown> }> = []
 
-afterEach(() => {
-  while (editors.length > 0) editors.pop()?.destroy()
+afterEach(async () => {
+  while (editors.length > 0) await editors.pop()?.destroy()
 })
 
 async function roundTrip(markdown: string): Promise<string> {
@@ -24,7 +24,7 @@ async function roundTrip(markdown: string): Promise<string> {
   document.body.append(root)
 
   const editor = await createLightEditor({ root, defaultValue: markdown }).create()
-  editors.push({ destroy: () => void editor.destroy() })
+  editors.push({ destroy: () => editor.destroy() })
 
   return editor.action((ctx) => {
     const serializer = ctx.get(serializerCtx)
@@ -38,7 +38,7 @@ async function inspect(markdown: string): Promise<{ nodes: string[]; marks: stri
   document.body.append(root)
 
   const editor = await createLightEditor({ root, defaultValue: markdown }).create()
-  editors.push({ destroy: () => void editor.destroy() })
+  editors.push({ destroy: () => editor.destroy() })
 
   return editor.action((ctx) => {
     const nodes = new Set<string>()
@@ -201,7 +201,7 @@ describe('兜底节点（remark 认得但 schema 未跟上时）', () => {
     const editor = await createLightEditor({ root, defaultValue: markdown })
       .use($remark('probeDirective', () => remarkDirective))
       .create()
-    editors.push({ destroy: () => void editor.destroy() })
+    editors.push({ destroy: () => editor.destroy() })
 
     return editor.action((ctx) => {
       const nodes = new Set<string>()
@@ -278,7 +278,7 @@ describe('编辑器可用性', () => {
     expect(await roundTrip('')).toBeDefined()
   })
 
-  // Milkdown 的 listener 内置 200ms 防抖，回调不会在 dispatch 时同步触发。
+  // Light 的 Markdown listener 内置 200ms 防抖，回调不会在 dispatch 时同步触发。
   // 这也是编辑器 store 只需再加一层短防抖的原因（见 stores/editor.ts）。
   it('变更会通过 listener 回调抛出 markdown（防抖后）', async () => {
     const root = document.createElement('div')
@@ -290,7 +290,7 @@ describe('编辑器可用性', () => {
       defaultValue: '初始',
       onMarkdownUpdated: (markdown) => updates.push(markdown),
     }).create()
-    editors.push({ destroy: () => void editor.destroy() })
+    editors.push({ destroy: () => editor.destroy() })
 
     editor.action((ctx) => {
       const view = ctx.get(editorViewCtx)

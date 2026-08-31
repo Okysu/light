@@ -11,6 +11,7 @@ import { useWorkspaceStore } from '@/stores/workspace'
 import { useI18nStore } from '@/stores/i18n'
 import FileTree from './FileTree.vue'
 import SidebarSection from './SidebarSection.vue'
+import SidebarStatus from './SidebarStatus.vue'
 import TagTreeItem from './TagTreeItem.vue'
 
 /**
@@ -83,7 +84,7 @@ async function open(path: string): Promise<void> {
       <FileTree />
     </div>
 
-    <div class="shrink-0 border-t border-border">
+    <div class="max-h-[55%] shrink-0 overflow-y-auto border-t border-border">
       <SidebarSection id="tags" :title="i18n.t('sidebar.tags')" :count="collections.tags.length">
         <template #actions>
           <Button
@@ -161,6 +162,8 @@ async function open(path: string): Promise<void> {
           </button>
         </ScrollArea>
       </SidebarSection>
+
+      <SidebarStatus />
     </div>
   </div>
 </template>

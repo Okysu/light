@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import type { AiScenario } from '@/core/ai/scenarios'
+import type { ImageContext } from '@/core/ai/image-context'
 import { boardFromTaskLines, canvasFromMindmap } from '@/core/ai/artifacts'
 import { useAiStore } from '@/stores/ai'
 import { useEditorStore } from '@/stores/editor'
@@ -31,6 +32,7 @@ const scenarioI18n = useAiScenarioI18n()
 
 /** 打开面板时定格的选中内容。之后编辑器失焦、选区消失也不影响这次操作 */
 const captured = ref('')
+let capturedContext: ImageContext = { storage: null, notePath: '' }
 const parameter = ref('')
 const chosen = ref<AiScenario | null>(null)
 
@@ -51,6 +53,7 @@ watch(
       return
     }
     captured.value = editor.selectionBridge?.selection() ?? ''
+    capturedContext = { storage: workspace.storage, notePath: editor.activePath ?? '' }
     chosen.value = null
     parameter.value = ''
     ai.reset()
@@ -66,7 +69,10 @@ async function start(scenario: AiScenario): Promise<void> {
   parameter.value = parameter.value || scenario.parameter?.options[0] || ''
 
   try {
-    await ai.run(scenario.id, inputFor(scenario), parameter.value)
+    const context = scenario.target === 'document'
+      ? { storage: workspace.storage, notePath: editor.activePath ?? '' }
+      : capturedContext
+    await ai.run(scenario.id, inputFor(scenario), parameter.value, undefined, context)
   } catch {
     // 错误已经进了 store 的 error/hint，模板会展示；这里不重复处理
   }

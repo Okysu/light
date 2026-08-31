@@ -42,35 +42,56 @@ const dailyNotePreview = computed(() =>
 /** 当前数据目录。异步取，因为默认值要问系统「文档目录在哪」 */
 const dataPath = ref('')
 const customized = ref(false)
+const pathError = ref('')
+const changingPath = ref(false)
 
 async function refreshPath(): Promise<void> {
   if (workspace.runtime !== 'desktop') return
-  dataPath.value = await currentDataPath()
   customized.value = hasCustomDataPath()
+  pathError.value = ''
+  try {
+    dataPath.value = workspace.location?.kind === 'tauri-fs'
+      ? workspace.location.path
+      : await currentDataPath()
+  } catch (cause) {
+    pathError.value = cause instanceof Error ? cause.message : String(cause)
+  }
 }
 
 onMounted(refreshPath)
 
 async function change(): Promise<void> {
+  if (changingPath.value || workspace.loading) return
+  changingPath.value = true
   try {
     if (await workspace.changeDataPath()) await refreshPath()
   } catch (cause) {
     workspace.error = cause instanceof Error ? cause.message : String(cause)
+  } finally {
+    changingPath.value = false
   }
 }
 
 async function reset(): Promise<void> {
+  if (changingPath.value || workspace.loading) return
+  changingPath.value = true
   try {
     await workspace.resetDataPath()
     await refreshPath()
   } catch (cause) {
     workspace.error = cause instanceof Error ? cause.message : String(cause)
+  } finally {
+    changingPath.value = false
   }
 }
 </script>
 
 <template>
   <div class="space-y-6">
+    <div v-if="!workspace.isOpen" role="alert" class="space-y-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
+      <p>{{ i18n.t('workspace.unavailable') }}</p>
+      <p v-if="workspace.error" class="break-all text-xs text-destructive">{{ workspace.error }}</p>
+    </div>
     <!--
       数据位置放在最前面：这是用户唯一需要知道的「我的东西在哪」。
       不叫「工作区」——那是实现细节，用户想的是保存路径。
@@ -81,11 +102,11 @@ async function reset(): Promise<void> {
       :description="i18n.t('workspace.dataPathHint')"
     >
       <div class="flex w-full flex-col gap-2">
-        <code class="break-all rounded-md bg-muted px-2 py-1.5 text-xs">{{ dataPath || i18n.t('workspace.loading') }}</code>
+        <code class="break-all rounded-md bg-muted px-2 py-1.5 text-xs">{{ dataPath || pathError || i18n.t('workspace.loading') }}</code>
         <div class="flex gap-2">
-          <Button variant="outline" size="sm" @click="change">{{ i18n.t('workspace.change') }}</Button>
+          <Button variant="outline" size="sm" :disabled="changingPath || workspace.loading" @click="change">{{ i18n.t('workspace.change') }}</Button>
           <!-- 没改过就不显示「恢复默认」：一个点了什么也不会变的按钮只会让人怀疑自己 -->
-          <Button v-if="customized" variant="ghost" size="sm" @click="reset">{{ i18n.t('workspace.reset') }}</Button>
+          <Button v-if="customized" variant="ghost" size="sm" :disabled="changingPath || workspace.loading" @click="reset">{{ i18n.t('workspace.reset') }}</Button>
         </div>
       </div>
     </SettingRow>
@@ -103,8 +124,8 @@ async function reset(): Promise<void> {
       :description="i18n.t('workspace.dailyHint', { shortcut: dailyShortcut })"
     >
       <div class="flex w-full flex-col gap-2">
-        <Input v-model="dailyNoteFolder" class="w-full font-mono" :placeholder="i18n.t('workspace.dailyFolder')" />
-        <Input v-model="dailyNoteFormat" class="w-full font-mono" placeholder="YYYY-MM-DD" />
+        <Input v-model="dailyNoteFolder" :disabled="!workspace.isOpen" class="w-full font-mono" :placeholder="i18n.t('workspace.dailyFolder')" />
+        <Input v-model="dailyNoteFormat" :disabled="!workspace.isOpen" class="w-full font-mono" placeholder="YYYY-MM-DD" />
         <p class="text-xs text-muted-foreground">
           {{ i18n.t('workspace.dailyPreview') }} <code class="rounded bg-muted px-1">{{ dailyNotePreview }}</code>
         </p>

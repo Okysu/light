@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { canEncrypt, decryptSecret, encryptSecret, forgetDeviceKey } from '@/core/ai/key-store'
 import { providerFor } from '@/core/ai/providers'
+import { ImageContextError, resolveImageContext, toBase64, withImages, type ImageContext } from '@/core/ai/image-context'
+import { useI18nStore } from './i18n'
 import {
   AI_SCENARIOS,
   findScenario,
@@ -92,6 +94,7 @@ export const useAiStore = defineStore('ai', () => {
     input: string,
     parameter?: string,
     onText?: (text: string) => void,
+    imageContext?: ImageContext,
   ): Promise<string> {
     const scenario = findScenario(scenarioId)
     if (!scenario) throw new AiError(`未知的场景：${scenarioId}`)
@@ -100,7 +103,7 @@ export const useAiStore = defineStore('ai', () => {
     }
     if (!input.trim()) throw new AiError('没有可处理的内容')
 
-    return execute(scenario, scenario.build(input, parameter), onText)
+    return execute(scenario, scenario.build(input, parameter), onText, imageContext && { ...imageContext, markdown: input })
   }
 
   /**
@@ -126,7 +129,7 @@ export const useAiStore = defineStore('ai', () => {
     }
 
     return execute(scenario, [
-      { role: 'user', content: imagePrompt(mode), image: { mime, base64: toBase64(bytes) } },
+      { role: 'user', content: imagePrompt(mode), images: [{ mime, base64: toBase64(bytes) }] },
     ])
   }
 
@@ -138,11 +141,15 @@ export const useAiStore = defineStore('ai', () => {
     scenario: AiScenario,
     messages: ChatMessage[],
     onText?: (text: string) => void,
+    imageContext?: ImageContext & { markdown: string },
   ): Promise<string> {
     // 上一次还没停就再点一次：直接顶掉它。让用户先手动停止再重来是多余的一步
     stop()
 
-    controller = new AbortController()
+    const requestController = new AbortController()
+    controller = requestController
+    const { signal } = requestController
+    let result = ''
     running.value = scenario
     output.value = ''
     reasoning.value = ''
@@ -150,7 +157,13 @@ export const useAiStore = defineStore('ai', () => {
     hint.value = null
 
     try {
+      if (imageContext) {
+        const images = await resolveImageContext(imageContext.markdown, imageContext, signal)
+        messages = withImages(messages, images)
+      }
+      signal.throwIfAborted()
       const apiKey = settings.value.secret ? ((await decryptSecret(settings.value.secret)) ?? '') : ''
+      signal.throwIfAborted()
       if (settings.value.secret && !apiKey) {
         throw new AiError(
           '保存的 API Key 解不开了',
@@ -164,38 +177,50 @@ export const useAiStore = defineStore('ai', () => {
         config: resolveProvider(settings.value.provider),
         apiKey,
         messages,
-        signal: controller.signal,
+        signal,
         ...(settings.value.maxTokens > 0 ? { maxTokens: settings.value.maxTokens } : {}),
         ...(extra ? { extraBody: extra } : {}),
       })) {
+        signal.throwIfAborted()
         if (chunk.kind === 'reasoning') {
           reasoning.value += chunk.text
           continue
         }
-        output.value += chunk.text
+        result += chunk.text
+        output.value = result
         // 逐段回调给调用方（流式写进编辑器时用它）。
         // 思考不回调——那些字不该出现在用户的笔记里
         onText?.(chunk.text)
       }
 
-      return output.value
+      return result
     } catch (cause) {
       // 用户主动停止不是错误。把已经收到的部分留在 output 里——
       // 他多半就是觉得够了才停的，清空反而毁掉了成果
-      if (cause instanceof DOMException && cause.name === 'AbortError') return output.value
+      if (signal.aborted) return result
+      if (cause instanceof DOMException && cause.name === 'AbortError') return result
+
+      if (cause instanceof ImageContextError) {
+        const i18n = useI18nStore()
+        const key = cause.reason === 'format' ? 'ai.imageFormatError'
+          : cause.reason === 'size' ? 'ai.imageSizeError' : 'ai.imageReadError'
+        cause = new AiError(i18n.t(key), i18n.t('ai.imageContextHint'))
+      }
 
       error.value = cause instanceof Error ? cause.message : String(cause)
       hint.value = cause instanceof AiError ? (cause.hint ?? null) : null
       throw cause
     } finally {
-      running.value = null
-      controller = null
+      // 图片读取不能总是立即中断；旧请求收尾不能清掉新请求的 busy / 停止按钮。
+      if (controller === requestController) {
+        running.value = null
+        controller = null
+      }
     }
   }
 
   function stop(): void {
     controller?.abort()
-    controller = null
   }
 
   /**
@@ -208,6 +233,7 @@ export const useAiStore = defineStore('ai', () => {
     instruction: string,
     input: string,
     onText?: (text: string) => void,
+    imageContext?: ImageContext,
   ): Promise<string> {
     if (!settings.value.enabled) throw new AiError('AI 功能尚未启用')
     if (!instruction.trim()) throw new AiError('请先说明要做什么')
@@ -221,7 +247,7 @@ export const useAiStore = defineStore('ai', () => {
       build: () => [],
     }
 
-    return execute(scenario, instructionMessages(instruction, input), onText)
+    return execute(scenario, instructionMessages(instruction, input), onText, imageContext && { ...imageContext, markdown: input })
   }
 
   function reset(): void {
@@ -252,16 +278,6 @@ export const useAiStore = defineStore('ai', () => {
     reset,
   }
 })
-
-/** 分块转 base64：几 MB 的图片一次性展开参数会把调用栈撑爆 */
-function toBase64(bytes: Uint8Array): string {
-  const CHUNK = 0x8000
-  let binary = ''
-  for (let index = 0; index < bytes.length; index += CHUNK) {
-    binary += String.fromCharCode(...bytes.subarray(index, index + CHUNK))
-  }
-  return btoa(binary)
-}
 
 function readSettings(): AiSettings {
   try {

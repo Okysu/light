@@ -5,9 +5,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { createLightEditor } from '../create-editor'
 import { sanitizePastedHtml } from './paste-sanitizer'
 
-const editors: Array<{ destroy: () => void }> = []
-afterEach(() => {
-  while (editors.length) editors.pop()?.destroy()
+const editors: Array<{ destroy: () => Promise<unknown> }> = []
+afterEach(async () => {
+  while (editors.length) await editors.pop()?.destroy()
 })
 
 describe('sanitizePastedHtml', () => {
@@ -68,7 +68,7 @@ describe('sanitizePastedHtml', () => {
     const root = document.createElement('div')
     document.body.append(root)
     const editor = await createLightEditor({ root, defaultValue: '' }).create()
-    editors.push({ destroy: () => void editor.destroy() })
+    editors.push({ destroy: () => editor.destroy() })
 
     const transformed = editor.action((ctx) => {
       let result = ''

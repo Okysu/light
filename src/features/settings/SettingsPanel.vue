@@ -37,6 +37,7 @@ import ExtensionSettingsPage from './sections/ExtensionSettingsPage.vue'
 import { useI18nStore } from '@/stores/i18n'
 import { useExtensionsStore } from '@/stores/extensions'
 import { builtinName } from '@/core/extensions/builtins'
+import { isSettingsPageDisabled } from './availability'
 
 const ui = useUiStore()
 const workspace = useWorkspaceStore()
@@ -127,10 +128,6 @@ const activePage = computed(
   () => GROUPS.value.flatMap((group) => group.pages).find((page) => page.id === activeId.value) ?? null,
 )
 
-/** 数据目录还没就绪时这组设置无从落盘，禁用而不是隐藏——隐藏会让人以为功能不存在 */
-function isDisabled(groupId: string): boolean {
-  return groupId === 'workspace' && !workspace.isOpen
-}
 </script>
 
 <template>
@@ -167,7 +164,7 @@ function isDisabled(groupId: string): boolean {
                   :key="page.id"
                   class="flex w-full items-center gap-2 rounded-md border border-transparent px-2 py-1.5 text-left text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent disabled:pointer-events-none disabled:opacity-40"
                   :class="activeId === page.id && 'border-border bg-sidebar-accent font-medium'"
-                  :disabled="isDisabled(group.id)"
+                  :disabled="isSettingsPageDisabled(group.id, page.id, workspace.isOpen)"
                   @click="activeId = page.id"
                 >
                   <component :is="page.icon" class="size-4 shrink-0 text-muted-foreground" />
