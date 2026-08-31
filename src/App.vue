@@ -93,7 +93,9 @@ function invalidateWorkspaceCaches(): void {
 
 function invalidateSyncedCaches(): void {
   search.invalidate()
-  properties.invalidate()
+  // 同步可能只改属性定义，活动路径不变：不能等表单的 activePath watcher 来重载。
+  // 保留旧表单，加载完成后替换，否则会永久降级为 created / updated 等原始字段。
+  void properties.ensureLoaded(true)
   linksStore.invalidate()
   attachments.invalidate()
   void collections.refresh()
@@ -129,6 +131,7 @@ watch(
     () => ai.error,
     () => search.error,
     () => exporter.error,
+    () => properties.error,
   ],
   (current, previous) => {
     current.forEach((message, index) => {
