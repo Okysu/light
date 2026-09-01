@@ -13,6 +13,7 @@ import {
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import ContextMenu, { type MenuItem } from '@/components/ContextMenu.vue'
 import type { BoardCard } from '@/core/board/types'
+import { writeBoardCardDrag } from '@/core/board/drag'
 import { cn } from '@/lib/utils'
 import { useAttachmentsStore } from '@/stores/attachments'
 import { useEditorStore } from '@/stores/editor'
@@ -30,6 +31,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   open: []
   dragstart: [event: DragEvent]
+  dragend: []
   archive: []
   remove: []
   moveTo: [columnId: string]
@@ -101,6 +103,12 @@ const dueState = computed<'overdue' | 'soon' | 'normal' | null>(() => {
 })
 
 const PRIORITY_KEYS = { low: 'board.low', normal: 'board.normal', high: 'board.high' } as const
+
+function onDragStart(event: DragEvent): void {
+  if (!event.dataTransfer) return
+  writeBoardCardDrag(event.dataTransfer, props.card.id)
+  emit('dragstart', event)
+}
 </script>
 
 <template>
@@ -117,7 +125,8 @@ const PRIORITY_KEYS = { low: 'board.low', normal: 'board.normal', high: 'board.h
       )
     "
     @click="emit('open')"
-    @dragstart="emit('dragstart', $event)"
+    @dragstart="onDragStart"
+    @dragend="emit('dragend')"
   >
     <img
       v-if="coverUrl"

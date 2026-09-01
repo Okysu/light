@@ -49,11 +49,8 @@ function sourceColumn(columnId: string) {
   return board.board?.columns.find((column) => column.id === columnId)
 }
 
-function onCardDrop(columnId: string, index: number | undefined): void {
-  const cardId = draggingCardId.value
+function onCardDrop(cardId: string, columnId: string, index: number | undefined): void {
   draggingCardId.value = null
-  if (!cardId) return
-
   board.moveCard(cardId, columnId, index)
 }
 
@@ -216,7 +213,8 @@ function clearFilter(): void {
         @remove="removeColumn(column.id)"
         @archive-all="board.archiveColumn(column.id)"
         @card-drag-start="draggingCardId = $event"
-        @drop="onCardDrop(column.id, $event)"
+        @card-drag-end="draggingCardId = null"
+        @drop="(cardId, index) => onCardDrop(cardId, column.id, index)"
       />
 
       <!-- 新增列固定在最右，与卡片的「添加」保持同一种位置语言 -->

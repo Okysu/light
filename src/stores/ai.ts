@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { canEncrypt, decryptSecret, encryptSecret, forgetDeviceKey } from '@/core/ai/key-store'
 import { providerFor } from '@/core/ai/providers'
 import { ImageContextError, resolveImageContext, toBase64, withImages, type ImageContext } from '@/core/ai/image-context'
+import { createStreamTextNormalizer } from '@/core/ai/stream-text'
 import { useI18nStore } from './i18n'
 import {
   AI_SCENARIOS,
@@ -150,6 +151,7 @@ export const useAiStore = defineStore('ai', () => {
     controller = requestController
     const { signal } = requestController
     let result = ''
+    const normalizeText = createStreamTextNormalizer()
     running.value = scenario
     output.value = ''
     reasoning.value = ''
@@ -186,11 +188,13 @@ export const useAiStore = defineStore('ai', () => {
           reasoning.value += chunk.text
           continue
         }
-        result += chunk.text
+        const text = normalizeText(chunk.text)
+        if (!text) continue
+        result += text
         output.value = result
         // 逐段回调给调用方（流式写进编辑器时用它）。
         // 思考不回调——那些字不该出现在用户的笔记里
-        onText?.(chunk.text)
+        onText?.(text)
       }
 
       return result

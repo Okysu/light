@@ -5,6 +5,7 @@ import {
   normalizeTagPath,
   tagBelongsTo,
   tagPathPrefixes,
+  tagPathSegments,
 } from './hierarchy'
 
 describe('标签路径', () => {
@@ -15,6 +16,11 @@ describe('标签路径', () => {
 
   it('列出从根到自身的完整前缀', () => {
     expect(tagPathPrefixes('工作/Light/同步')).toEqual(['工作', '工作/Light', '工作/Light/同步'])
+  })
+
+  it('把层级标签拆成可视面包屑', () => {
+    expect(tagPathSegments(' 1 / 2 / 3 ')).toEqual(['1', '2', '3'])
+    expect(tagPathSegments('///')).toEqual([])
   })
 
   it('父分组匹配自身与后代，但不匹配相似前缀', () => {

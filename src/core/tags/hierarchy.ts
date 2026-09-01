@@ -34,12 +34,18 @@ export function normalizeTagPath(value: string): string {
     .join('/')
 }
 
+/** 供输入控件把 `父/子/孙` 明确渲染成面包屑，而不是一个含斜杠的普通标签。 */
+export function tagPathSegments(value: string): string[] {
+  const normalized = normalizeTagPath(value)
+  return normalized ? normalized.split('/') : []
+}
+
 /** 从根到自身的全部标签路径。 */
 export function tagPathPrefixes(value: string): string[] {
   const normalized = normalizeTagPath(value)
   if (!normalized) return []
 
-  const parts = normalized.split('/')
+  const parts = tagPathSegments(normalized)
   return parts.map((_, index) => parts.slice(0, index + 1).join('/'))
 }
 

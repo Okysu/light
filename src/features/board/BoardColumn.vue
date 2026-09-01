@@ -5,6 +5,7 @@ import ContextMenu, { type MenuItem } from '@/components/ContextMenu.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { countCards } from '@/core/board/operations'
+import { isBoardCardDrag, readBoardCardDrag } from '@/core/board/drag'
 import type { BoardColumn } from '@/core/board/types'
 import { useI18nStore } from '@/stores/i18n'
 import BoardCardView from './BoardCard.vue'
@@ -28,8 +29,9 @@ const emit = defineEmits<{
   remove: []
   archiveAll: []
   cardDragStart: [cardId: string]
+  cardDragEnd: []
   /** 卡片落到本列的第几位；index 为 undefined 表示放到末尾 */
-  drop: [index: number | undefined]
+  drop: [cardId: string, index: number | undefined]
 }>()
 
 const editingTitle = ref(false)
@@ -65,7 +67,9 @@ function commitRename(): void {
  * 用中线而不是整块区域，是为了让「插到两张卡之间」这个意图能被稳定表达出来。
  */
 function onDragOver(event: DragEvent): void {
+  if (!props.draggingCardId && !isBoardCardDrag(event.dataTransfer)) return
   event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
 
   const list = event.currentTarget as HTMLElement
   const cards = [...list.querySelectorAll<HTMLElement>('[data-card-id]')]
@@ -82,10 +86,11 @@ function onDragOver(event: DragEvent): void {
   dropIndex.value = index
 }
 
-function onDrop(): void {
+function onDrop(event: DragEvent): void {
+  const cardId = readBoardCardDrag(event.dataTransfer)
   const index = dropIndex.value
   dropIndex.value = null
-  emit('drop', index ?? undefined)
+  if (cardId) emit('drop', cardId, index ?? undefined)
 }
 </script>
 
@@ -132,6 +137,7 @@ function onDrop(): void {
             :columns="columns"
             @open="emit('openCard', card.id)"
             @dragstart="emit('cardDragStart', card.id)"
+            @dragend="emit('cardDragEnd')"
             @archive="emit('archiveCard', card.id)"
             @remove="emit('removeCard', card.id)"
             @move-to="emit('moveCardTo', card.id, $event)"

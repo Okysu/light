@@ -12,6 +12,15 @@ function response(): Response {
   return new Response('data: {"choices":[{"delta":{"content":"图片里的内容"}}]}\n\ndata: [DONE]\n\n')
 }
 
+function cumulativeResponse(): Response {
+  return new Response([
+    'data: {"choices":[{"delta":{"content":"续"}}]}\n\n',
+    'data: {"choices":[{"delta":{"content":"续写"}}]}\n\n',
+    'data: {"choices":[{"delta":{"content":"续写完成"}}]}\n\n',
+    'data: [DONE]\n\n',
+  ].join(''))
+}
+
 async function setup() {
   const ai = useAiStore()
   ai.save({ ...ai.settings, enabled: true, provider: { kind: 'custom', baseUrl: 'https://model.example/v1', model: 'vision-test' } })
@@ -29,6 +38,16 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('AI 选区图片到真实请求载荷', () => {
+  it('兼容返回累计快照的接口，续写不会重复追加', async () => {
+    const { ai, fetch } = await setup()
+    fetch.mockResolvedValueOnce(cumulativeResponse())
+    const onText = vi.fn()
+
+    expect(await ai.runInstruction('继续写', '开头', onText)).toBe('续写完成')
+    expect(onText.mock.calls.flat()).toEqual(['续', '写', '完成'])
+    expect(ai.output).toBe('续写完成')
+  })
+
   it.each(['instruction', 'scenario', 'document'])('%s 入口发送实际图片，并保留 Markdown 和流式输出', async (kind) => {
     const { ai, fetch, context } = await setup()
     const onText = vi.fn()

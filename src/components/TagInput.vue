@@ -4,6 +4,7 @@ import { Check, X } from 'lucide-vue-next'
 import { cn } from '@/lib/utils'
 import { normalizeTagPath } from '@/core/tags/hierarchy'
 import { useI18nStore } from '@/stores/i18n'
+import TagPath from './TagPath.vue'
 
 /**
  * 标签输入：输入框与选择器的结合体。
@@ -27,12 +28,14 @@ const input = ref<HTMLInputElement | null>(null)
 const open = ref(false)
 const query = ref('')
 const activeIndex = ref(0)
+const normalizedValues = computed(() => new Set(props.values.map(normalizeTagPath)))
+const normalizedSuggestions = computed(() => [...new Set(props.suggestions.map(normalizeTagPath).filter(Boolean))])
 
 /** 未被选中的候选，按输入过滤 */
 const filtered = computed(() => {
   const keyword = normalizeTagPath(query.value).toLowerCase()
-  return props.suggestions
-    .filter((item) => !props.values.includes(item))
+  return normalizedSuggestions.value
+    .filter((item) => !normalizedValues.value.has(item))
     .filter((item) => !keyword || item.toLowerCase().includes(keyword))
 })
 
@@ -40,8 +43,8 @@ const filtered = computed(() => {
 const creatable = computed(() => {
   const keyword = normalizeTagPath(query.value)
   if (!keyword) return null
-  if (props.values.includes(keyword)) return null
-  return props.suggestions.includes(keyword) ? null : keyword
+  if (normalizedValues.value.has(keyword)) return null
+  return normalizedSuggestions.value.includes(keyword) ? null : keyword
 })
 
 /** 候选 + 创建项合成一个可键盘遍历的列表 */
@@ -119,7 +122,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
         :key="value"
         class="flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs"
       >
-        {{ value }}
+        <TagPath :value="value" />
         <button
           type="button"
           class="text-muted-foreground hover:text-destructive"
@@ -174,8 +177,11 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
       >
         <Check v-if="!option.isNew" class="size-3.5 shrink-0 opacity-0" />
         <span class="truncate">
-          <template v-if="option.isNew">{{ i18n.t('tag.create', { name: option.value }) }}</template>
-          <template v-else>{{ option.value }}</template>
+          <template v-if="option.isNew">
+            {{ i18n.t(option.value.includes('/') ? 'tag.createHierarchy' : 'tag.createValue') }}
+            <TagPath :value="option.value" class="ml-1 font-medium" />
+          </template>
+          <TagPath v-else :value="option.value" />
         </span>
       </button>
     </div>
