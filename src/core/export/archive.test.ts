@@ -11,6 +11,9 @@ describe('collectArchiveEntries', () => {
     await fs.writeText('笔记.md', '# 笔记')
     await fs.writeText('项目/计划.md', '# 计划')
     await fs.writeText('项目/归档/旧稿.md', '# 旧稿')
+    await fs.writeText('attachments/图.png', 'PNG')
+    await fs.writeText('attachments/报告.pdf', 'PDF')
+    await fs.writeText('attachments/未引用.bin', 'BIN')
     await fs.writeText('.light/workspace.json', '{"version":1}')
     await fs.writeText('.light/properties.json', '{"version":1}')
     await fs.writeText('.light/sync.json', '{"version":1,"bucket":"notes"}')
@@ -40,6 +43,9 @@ describe('collectArchiveEntries', () => {
         '笔记.md',
         '项目/计划.md',
         '项目/归档/旧稿.md',
+        'attachments/图.png',
+        'attachments/报告.pdf',
+        'attachments/未引用.bin',
       ]),
     )
   })
@@ -68,7 +74,15 @@ describe('collectArchiveEntries', () => {
     expect(result.has('.light/extensions/demo/main.js')).toBe(true)
   })
 
-  it('指定单篇时只收那一篇', async () => {
+  it('指定单篇时带上正文实际引用的附件，不带无关附件', async () => {
+    await fs.writeText('笔记.md', '# 笔记\n\n![图](attachments/图.png)\n\n[报告](attachments/报告.pdf)')
+    expect(paths(await collectArchiveEntries(fs, { include: ['笔记.md'] }))).toEqual(
+      new Set(['笔记.md', 'attachments/图.png', 'attachments/报告.pdf']),
+    )
+  })
+
+  it('单篇导出不会沿普通笔记链接打包其它文档', async () => {
+    await fs.writeText('笔记.md', '[计划](项目/计划.md)')
     expect(paths(await collectArchiveEntries(fs, { include: ['笔记.md'] }))).toEqual(new Set(['笔记.md']))
   })
 
@@ -76,6 +90,12 @@ describe('collectArchiveEntries', () => {
     expect(paths(await collectArchiveEntries(fs, { include: ['项目'] }))).toEqual(
       new Set(['项目/计划.md', '项目/归档/旧稿.md']),
     )
+  })
+
+  it('目录里的笔记引用目录外附件时一并带上', async () => {
+    await fs.writeText('项目/计划.md', '![图](../attachments/图.png)')
+    const result = paths(await collectArchiveEntries(fs, { include: ['项目'] }))
+    expect(result.has('attachments/图.png')).toBe(true)
   })
 
   /**

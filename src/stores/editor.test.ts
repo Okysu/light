@@ -34,17 +34,6 @@ describe('editor store 的打开时序', () => {
     expect(editor.activePath).toBe('甲.md')
   })
 
-  it('分屏返回所见即所得时只递增视图版本，不改写 Markdown', async () => {
-    await editor.openNote('甲.md')
-    editor.updateContent('## 分屏正文\n\n- 保留源码')
-    const before = editor.contentRevision
-
-    editor.rebuildContentView()
-
-    expect(editor.contentRevision).toBe(before + 1)
-    expect(editor.draft).toBe('## 分屏正文\n\n- 保留源码')
-  })
-
   /**
    * 核心不变量：`activePath` 每次变化时，`draft` 必须已经是那一篇的内容。
    *

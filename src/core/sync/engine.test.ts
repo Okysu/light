@@ -109,6 +109,75 @@ describe('S3 同步引擎', () => {
     expect(await second.readText(conflict!.path)).toBe('设备 A')
   })
 
+  it('文本的非重叠并发修改会像 Git 一样自动三方合并并同步给其它设备', async () => {
+    const remote = new FakeRemote()
+    const first = new MemoryAdapter()
+    const second = new MemoryAdapter()
+    const path = '合并.md'
+    await first.writeText(path, '# 标题\n\n第一段\n\n第二段\n')
+    await synchronize({ storage: first, remote, deviceId: 'a', conflictPolicy: 'merge-text' })
+    await synchronize({ storage: second, remote, deviceId: 'b', conflictPolicy: 'merge-text' })
+
+    await first.writeText(path, '# 新标题\n\n第一段\n\n第二段\n')
+    await second.writeText(path, '# 标题\n\n第一段\n\n第二段已补充\n')
+    await synchronize({ storage: first, remote, deviceId: 'a', conflictPolicy: 'merge-text' })
+    const result = await synchronize({ storage: second, remote, deviceId: 'b', conflictPolicy: 'merge-text' })
+
+    const expected = '# 新标题\n\n第一段\n\n第二段已补充\n'
+    expect(result.merged).toEqual([path])
+    expect(result.conflicts).toEqual([])
+    expect(await second.readText(path)).toBe(expected)
+    expect((await second.list('')).some((entry) => entry.name.includes('冲突-云端'))).toBe(false)
+
+    const observer = new MemoryAdapter()
+    await synchronize({ storage: observer, remote, deviceId: 'observer', conflictPolicy: 'merge-text' })
+    expect(await observer.readText(path)).toBe(expected)
+  })
+
+  it('Markdown 的重叠修改写入标准冲突标记，不复制出另一篇笔记', async () => {
+    const remote = new FakeRemote()
+    const first = new MemoryAdapter()
+    const second = new MemoryAdapter()
+    const path = '重叠.md'
+    await first.writeText(path, '# 标题\n\n共同内容\n')
+    await synchronize({ storage: first, remote, deviceId: 'a', conflictPolicy: 'merge-text' })
+    await synchronize({ storage: second, remote, deviceId: 'b', conflictPolicy: 'merge-text' })
+
+    await first.writeText(path, '# 标题\n\n来自 A\n')
+    await second.writeText(path, '# 标题\n\n来自 B\n')
+    await synchronize({ storage: first, remote, deviceId: 'a', conflictPolicy: 'merge-text' })
+    const result = await synchronize({ storage: second, remote, deviceId: 'b', conflictPolicy: 'merge-text' })
+    const merged = await second.readText(path)
+
+    expect(result.merged).toEqual([])
+    expect(result.conflicts).toEqual([path])
+    expect(merged).toContain('<<<<<<< LOCAL\n来自 B')
+    expect(merged).toContain('||||||| BASE\n共同内容')
+    expect(merged).toContain('=======\n来自 A\n>>>>>>> REMOTE')
+    expect((await second.list('')).some((entry) => entry.name.includes('冲突-云端'))).toBe(false)
+  })
+
+  it('结构化 JSON 发生重叠冲突时回退到保留双份，避免写入非法 JSON', async () => {
+    const remote = new FakeRemote()
+    const first = new MemoryAdapter()
+    const second = new MemoryAdapter()
+    const path = '视图.board'
+    await first.writeText(path, '{"title":"共同"}\n')
+    await synchronize({ storage: first, remote, deviceId: 'a', conflictPolicy: 'merge-text' })
+    await synchronize({ storage: second, remote, deviceId: 'b', conflictPolicy: 'merge-text' })
+
+    await first.writeText(path, '{"title":"A"}\n')
+    await second.writeText(path, '{"title":"B"}\n')
+    await synchronize({ storage: first, remote, deviceId: 'a', conflictPolicy: 'merge-text' })
+    const result = await synchronize({ storage: second, remote, deviceId: 'b', conflictPolicy: 'merge-text' })
+
+    expect(result.conflicts).toEqual([path])
+    expect(JSON.parse(await second.readText(path))).toEqual({ title: 'B' })
+    const copy = (await second.list('')).find((entry) => entry.name.startsWith('视图 (冲突-云端-'))
+    expect(copy).toBeTruthy()
+    expect(JSON.parse(await second.readText(copy!.path))).toEqual({ title: 'A' })
+  })
+
   it.each([
     ['prefer-local', '设备 B', '设备 B', false],
     ['prefer-remote', '设备 A', '设备 A', false],

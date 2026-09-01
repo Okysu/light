@@ -230,12 +230,6 @@ export const useEditorStore = defineStore('editor', () => {
     schedule()
   }
 
-  /** 当前 Markdown 未改变，但需要让持有内部文档状态的编辑器重新解析一次。 */
-  function rebuildContentView(): void {
-    if (!note.value) return
-    contentRevision.value += 1
-  }
-
   function schedule(): void {
     // 每次调度都重新读延迟：用户在设置里改完，下一次输入就该按新值走
     autosave.schedule(preferences.autosaveDelay)
@@ -447,7 +441,6 @@ export const useEditorStore = defineStore('editor', () => {
     updateContent,
     updateTitle,
     replaceContent,
-    rebuildContentView,
     setProperty,
     save,
     flush,

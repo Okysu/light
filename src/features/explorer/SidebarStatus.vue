@@ -44,7 +44,10 @@ async function runSync(): Promise<void> {
   try {
     const result = await sync.syncNow()
     if (result) toast.success(i18n.t('sync.complete', {
-      uploaded: result.uploaded, downloaded: result.downloaded, conflicts: result.conflicts.length,
+      uploaded: result.uploaded,
+      downloaded: result.downloaded,
+      merged: result.merged.length,
+      conflicts: result.conflicts.length,
     }))
   } catch (cause) {
     // 顶层通常会通过 sync.error 弹出 Toast；也覆盖进入 Store 前的工作区错误。

@@ -1,7 +1,7 @@
 import type { StorageAdapter } from '../storage'
 import type { AttachmentSyncPolicy } from './attachment-policy'
 
-export type ConflictPolicy = 'keep-both' | 'manual' | 'prefer-local' | 'prefer-remote'
+export type ConflictPolicy = 'merge-text' | 'keep-both' | 'manual' | 'prefer-local' | 'prefer-remote'
 export type VersionVector = Record<string, number>
 
 /** 会随 Vault 走的公开配置；凭据绝不放在这里。 */
@@ -97,6 +97,8 @@ export interface SyncResult {
   deletedLocal: number
   deletedRemote: number
   conflicts: string[]
+  /** 通过三方合并自动收敛、无需用户介入的文本文件。 */
+  merged: string[]
   finishedAt: number
 }
 

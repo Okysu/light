@@ -30,7 +30,12 @@ describe('同步配置', () => {
 
   it('损坏配置回退安全默认值', () => {
     expect(normalizeSyncConfig(null)).toEqual(DEFAULT_SYNC_CONFIG)
+    expect(DEFAULT_SYNC_CONFIG.conflictPolicy).toBe('merge-text')
     expect(normalizePrefix('///a/b///')).toBe('a/b')
+  })
+
+  it('接受智能文本合并策略', () => {
+    expect(normalizeSyncConfig({ conflictPolicy: 'merge-text' }).conflictPolicy).toBe('merge-text')
   })
 
   it('端点、区域和 Bucket 齐全才算可连接', () => {

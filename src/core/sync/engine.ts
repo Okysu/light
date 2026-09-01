@@ -6,19 +6,31 @@ import { SyncError } from './types'
 import { compareVectors, incrementVector, mergeVectors } from './vector'
 import { attachmentSyncDecision, DEFAULT_ATTACHMENT_SYNC_POLICY } from './attachment-policy'
 import { createSHA256 } from 'hash-wasm'
+import { mergeText, type ThreeWayMergeResult } from './three-way-merge'
 
 const EXCLUDED_ROOTS = new Set(['.git', '.obsidian', 'node_modules', '.light-sync'])
 /** 每台设备独立生成的派生状态；同步它会让自动快照索引互相冲突。 */
 const LOCAL_ONLY_PREFIXES = ['.light/history']
 const MAX_RETRIES = 3
 const RETRY_BASE_DELAY_MS = 25
+const MAX_TEXT_MERGE_BYTES = 5 * 1024 * 1024
+const TEXT_MERGE_EXTENSIONS = new Set([
+  '.md', '.txt', '.json', '.board', '.canvas', '.js', '.ts', '.css', '.html', '.xml',
+  '.yaml', '.yml', '.toml', '.csv', '.ini', '.conf', '.sh', '.ps1',
+])
+const CONFLICT_MARKER_SAFE_EXTENSIONS = new Set([
+  '.md', '.txt', '.js', '.ts', '.css', '.html', '.xml', '.yaml', '.yml', '.toml',
+  '.csv', '.ini', '.conf', '.sh', '.ps1',
+])
+const JSON_EXTENSIONS = new Set(['.json', '.board', '.canvas'])
 
 interface LocalFile { path: string; hash: string; size: number }
-interface UploadAction { path: string; hash: string }
+interface UploadAction { path: string; hash: string; contents?: Uint8Array }
 interface DownloadAction { kind: 'download'; path: string; hash: string; expectedLocal?: LocalFile }
 interface DeleteAction { kind: 'delete'; path: string; expectedLocal: LocalFile }
 interface ConflictCopyAction { kind: 'conflict-copy'; path: string; hash: string }
-type LocalAction = DownloadAction | DeleteAction | ConflictCopyAction
+interface WriteMergedAction { kind: 'write-merged'; path: string; contents: Uint8Array; expectedLocal: LocalFile }
+type LocalAction = DownloadAction | DeleteAction | ConflictCopyAction | WriteMergedAction
 
 interface SyncPlan {
   manifest: RemoteManifest
@@ -55,17 +67,18 @@ async function synchronizeAttempt(options: SyncOptions): Promise<SyncResult> {
     options.remote.readManifest(options.signal),
   ])
   throwIfAborted(options.signal)
-  const plan = buildPlan(localFiles, state, remoteSnapshot, options, now)
+  const plan = await buildPlan(localFiles, state, remoteSnapshot, options, now)
 
   for (let index = 0; index < plan.uploads.length; index += 1) {
     throwIfAborted(options.signal)
     const upload = plan.uploads[index]!
     options.onProgress?.({ phase: 'upload', current: index, total: plan.uploads.length, path: upload.path })
-    const current = await hashChunks(options.storage.readChunks(upload.path, undefined, options.signal), options.signal)
-    if (current !== upload.hash) {
-      throw new SyncError(`同步扫描后文件又发生了变化，请重试：${upload.path}`, 'IO')
-    }
-    if (options.remote.writeContentChunks) {
+    if (upload.contents) {
+      await assertLocalUnchanged(options.storage, upload.path, localFiles.get(upload.path))
+      await options.remote.writeContent(upload.hash, upload.contents, options.signal)
+    } else if (options.remote.writeContentChunks) {
+      const current = await hashChunks(options.storage.readChunks(upload.path, undefined, options.signal), options.signal)
+      if (current !== upload.hash) throw new SyncError(`同步扫描后文件又发生了变化，请重试：${upload.path}`, 'IO')
       const size = (await options.storage.stat(upload.path)).size
       await options.remote.writeContentChunks(
         upload.hash,
@@ -74,6 +87,8 @@ async function synchronizeAttempt(options: SyncOptions): Promise<SyncResult> {
         options.signal,
       )
     } else {
+      const current = await hashChunks(options.storage.readChunks(upload.path, undefined, options.signal), options.signal)
+      if (current !== upload.hash) throw new SyncError(`同步扫描后文件又发生了变化，请重试：${upload.path}`, 'IO')
       await options.remote.writeContent(
         upload.hash,
         await collectChunks(options.storage.readChunks(upload.path, undefined, options.signal), options.signal),
@@ -107,13 +122,13 @@ async function synchronizeAttempt(options: SyncOptions): Promise<SyncResult> {
   return plan.result
 }
 
-function buildPlan(
+async function buildPlan(
   localFiles: Map<string, LocalFile>,
   state: LocalSyncState,
   remoteSnapshot: RemoteManifestSnapshot | null,
   options: SyncOptions,
   now: () => number,
-): SyncPlan {
+): Promise<SyncPlan> {
   const manifest: RemoteManifest = remoteSnapshot
     ? structuredClone(remoteSnapshot.manifest)
     : { version: 1, entries: {}, updatedAt: 0 }
@@ -129,7 +144,7 @@ function buildPlan(
     manifestChanged: false,
     uploads: [],
     localActions: [],
-    result: { uploaded: 0, downloaded: 0, deletedLocal: 0, deletedRemote: 0, conflicts: [], finishedAt: 0 },
+    result: { uploaded: 0, downloaded: 0, deletedLocal: 0, deletedRemote: 0, conflicts: [], merged: [], finishedAt: 0 },
   }
 
   const paths = new Set([...localFiles.keys(), ...Object.keys(baselineEntries), ...Object.keys(manifest.entries)])
@@ -145,7 +160,7 @@ function buildPlan(
     const remote = manifest.entries[path]
     const baseline = baselineEntries[path]
     if (!baseline) {
-      reconcileFirstSeen(path, local, remote, plan, options, now)
+      await reconcileFirstSeen(path, local, remote, plan, options, now)
       continue
     }
     if (!remote) throw new SyncError(`远端同步清单丢失已跟踪条目：${path}`, 'INVALID_REMOTE')
@@ -163,13 +178,13 @@ function buildPlan(
     } else if (localHash === remoteHash) {
       plan.nextState.entries[path] = entryState(localHash, remoteHash, remote.vector)
     } else {
-      resolveConflict(path, local, remote, baseline.vector, plan, options, now)
+      await resolveConflict(path, local, remote, baseline, plan, options, now)
     }
   }
   return plan
 }
 
-function reconcileFirstSeen(path: string, local: LocalFile | undefined, remote: RemoteEntry | undefined, plan: SyncPlan, options: SyncOptions, now: () => number): void {
+async function reconcileFirstSeen(path: string, local: LocalFile | undefined, remote: RemoteEntry | undefined, plan: SyncPlan, options: SyncOptions, now: () => number): Promise<void> {
   const localHash = local?.hash ?? null
   const remoteHash = contentHash(remote)
   if (localHash === remoteHash && (local || remote)) {
@@ -179,7 +194,7 @@ function reconcileFirstSeen(path: string, local: LocalFile | undefined, remote: 
   } else if (!local && remote) {
     applyRemote(path, local, remote, plan)
   } else if (local && remote) {
-    resolveConflict(path, local, remote, {}, plan, options, now)
+    await resolveConflict(path, local, remote, undefined, plan, options, now)
   }
 }
 
@@ -207,20 +222,118 @@ function applyRemote(path: string, local: LocalFile | undefined, remote: RemoteE
   }
 }
 
-function resolveConflict(path: string, local: LocalFile | undefined, remote: RemoteEntry, baselineVector: VersionVector, plan: SyncPlan, options: SyncOptions, now: () => number): void {
+async function resolveConflict(path: string, local: LocalFile | undefined, remote: RemoteEntry, baseline: LocalSyncEntry | undefined, plan: SyncPlan, options: SyncOptions, now: () => number): Promise<void> {
+  if (options.conflictPolicy === 'merge-text') {
+    const merged = await tryTextMerge(path, local, remote, baseline, options)
+    if (merged) {
+      if (merged.result.clean) plan.result.merged.push(path)
+      else plan.result.conflicts.push(path)
+      await publishMerged(path, local!, remote, baseline!, merged.result, plan, options, now)
+      return
+    }
+  }
+
   plan.result.conflicts.push(path)
+  const baselineVector = baseline?.vector ?? {}
   if (options.conflictPolicy === 'prefer-local') {
     publishLocal(path, local, remote, baselineVector, plan, options, now)
   } else if (options.conflictPolicy === 'prefer-remote') {
     applyRemote(path, local, remote, plan)
   } else {
     if (!remote.deleted && remote.hash) plan.localActions.push({ kind: 'conflict-copy', path, hash: remote.hash })
-    if (options.conflictPolicy === 'keep-both') {
+    if (options.conflictPolicy === 'keep-both' || options.conflictPolicy === 'merge-text') {
       publishLocal(path, local, remote, baselineVector, plan, options, now)
     } else {
       plan.nextState.entries[path] = entryState(local?.hash ?? null, contentHash(remote), remote.vector)
     }
   }
+}
+
+async function tryTextMerge(
+  path: string,
+  local: LocalFile | undefined,
+  remote: RemoteEntry,
+  baseline: LocalSyncEntry | undefined,
+  options: SyncOptions,
+): Promise<{ result: ThreeWayMergeResult } | null> {
+  if (!local || remote.deleted || !remote.hash || !baseline?.remoteHash) return null
+  // 只有上次同步时两边确实指向同一份内容，它才是可信的 merge base。
+  if (baseline.localHash !== baseline.remoteHash) return null
+  const extension = extname(path).toLowerCase()
+  if (!TEXT_MERGE_EXTENSIONS.has(extension)) return null
+  if (local.size > MAX_TEXT_MERGE_BYTES || remote.size > MAX_TEXT_MERGE_BYTES) return null
+
+  const localBytes = await options.storage.readBinary(path)
+  if (localBytes.byteLength > MAX_TEXT_MERGE_BYTES || await hashBytes(localBytes) !== local.hash) {
+    throw new SyncError(`同步扫描后文件又发生了变化，请重试：${path}`, 'IO')
+  }
+  const remoteBytes = await readVerifiedRemote(options, remote.hash)
+  let baseBytes: Uint8Array
+  try {
+    baseBytes = await readVerifiedRemote(options, baseline.remoteHash)
+  } catch {
+    // 远端对象清理策略可能已经回收旧版本；没有可靠 base 就退回保留双份。
+    return null
+  }
+  if (baseBytes.byteLength > MAX_TEXT_MERGE_BYTES || remoteBytes.byteLength > MAX_TEXT_MERGE_BYTES) return null
+
+  let baseText: string
+  let localText: string
+  let remoteText: string
+  try {
+    const decoder = new TextDecoder('utf-8', { fatal: true })
+    baseText = decoder.decode(baseBytes)
+    localText = decoder.decode(localBytes)
+    remoteText = decoder.decode(remoteBytes)
+  } catch {
+    return null
+  }
+
+  const result = mergeText(baseText, localText, remoteText)
+  if (!result.clean && !CONFLICT_MARKER_SAFE_EXTENSIONS.has(extension)) return null
+  if (result.clean && JSON_EXTENSIONS.has(extension)) {
+    try {
+      JSON.parse(result.text)
+    } catch {
+      return null
+    }
+  }
+  return { result }
+}
+
+async function publishMerged(
+  path: string,
+  local: LocalFile,
+  remote: RemoteEntry,
+  baseline: LocalSyncEntry,
+  merged: ThreeWayMergeResult,
+  plan: SyncPlan,
+  options: SyncOptions,
+  now: () => number,
+): Promise<void> {
+  const contents = new TextEncoder().encode(merged.text)
+  const hash = await hashBytes(contents)
+  const vector = incrementVector(mergeVectors(baseline.vector, remote.vector), options.deviceId)
+  plan.manifestChanged = true
+  plan.uploads.push({ path, hash, contents })
+  plan.localActions.push({ kind: 'write-merged', path, contents, expectedLocal: local })
+  plan.manifest.entries[path] = { hash, size: contents.byteLength, vector, deleted: false, modifiedAt: now() }
+  plan.nextState.entries[path] = entryState(hash, hash, vector)
+}
+
+async function readVerifiedRemote(options: SyncOptions, expectedHash: string): Promise<Uint8Array> {
+  throwIfAborted(options.signal)
+  const bytes = await options.remote.readContent(expectedHash, options.signal)
+  if (await hashBytes(bytes) !== expectedHash) {
+    throw new SyncError(`远端对象校验失败：${expectedHash}`, 'INVALID_REMOTE')
+  }
+  return bytes
+}
+
+async function hashBytes(bytes: Uint8Array): Promise<string> {
+  const hasher = await createSHA256()
+  hasher.update(bytes)
+  return hasher.digest('hex')
 }
 
 async function applyLocalActions(
@@ -237,7 +350,7 @@ async function applyLocalActions(
   const staged = new Map<string, string>()
   try {
     for (const action of actions) {
-      if (action.kind === 'delete' || staged.has(action.hash)) continue
+      if (action.kind === 'delete' || action.kind === 'write-merged' || staged.has(action.hash)) continue
       const stagingPath = `.light-sync/staging/${crypto.randomUUID()}`
       await stageVerifiedRemoteContent(options, action.hash, stagingPath)
       staged.set(action.hash, stagingPath)
@@ -260,6 +373,8 @@ async function applyLocalActions(
         if (action.kind === 'delete') {
           await options.storage.remove(action.path)
           result.deletedLocal += 1
+        } else if (action.kind === 'write-merged') {
+          await options.storage.writeBinary(action.path, action.contents)
         } else {
           options.onProgress?.({ phase: 'download', current: result.downloaded, total: result.downloaded + 1, path: action.path })
           await options.storage.writeChunks(action.path, options.storage.readChunks(staged.get(action.hash)!, undefined, options.signal), options.signal)

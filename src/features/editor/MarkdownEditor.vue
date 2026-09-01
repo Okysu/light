@@ -8,8 +8,7 @@ import './styles/milkdown-components.css'
 
 import type { Ctx } from '@milkdown/kit/ctx'
 import { Milkdown, useEditor } from '@milkdown/vue'
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { Columns2, SquarePen } from 'lucide-vue-next'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import AiSelectionBar from './ai/AiSelectionBar.vue'
 import { createSelectionBridge } from './ai/selection-bridge'
 import { useEditorStore } from '@/stores/editor'
@@ -32,8 +31,6 @@ import TableMenu from './table/TableMenu.vue'
 import { createTableMenu } from './table/controller'
 import { createTableHandles } from './table/handles'
 import { installTableEdgeButtons } from './table/edge-buttons'
-import { Button } from '@/components/ui/button'
-import MarkdownPreview from './MarkdownPreview.vue'
 
 const store = useEditorStore()
 const preferences = usePreferencesStore()
@@ -46,9 +43,6 @@ const toast = useToastStore()
 const notePath = store.activePath ?? ''
 
 const titleInput = ref<HTMLTextAreaElement | null>(null)
-const sourceInput = ref<HTMLTextAreaElement | null>(null)
-const previewRevision = ref(0)
-let previewTimer: ReturnType<typeof setTimeout> | null = null
 
 /** 标题用 textarea 以便长标题自动换行；高度随内容增长 */
 function onTitleInput(event: Event): void {
@@ -64,41 +58,8 @@ function autoGrow(element: HTMLTextAreaElement): void {
 
 /** 在标题里按回车应当跳到正文，而不是给标题插入换行 */
 function focusBody(): void {
-  if (preferences.editorMode === 'split') {
-    sourceInput.value?.focus()
-    return
-  }
   const editable = host.value?.querySelector<HTMLElement>('.light-prose')
   editable?.focus()
-}
-
-function schedulePreview(): void {
-  if (previewTimer !== null) clearTimeout(previewTimer)
-  previewTimer = setTimeout(() => {
-    previewTimer = null
-    previewRevision.value += 1
-  }, 160)
-}
-
-function onSourceInput(event: Event): void {
-  store.updateContent((event.target as HTMLTextAreaElement).value)
-  schedulePreview()
-}
-
-async function setEditorMode(mode: 'wysiwyg' | 'split'): Promise<void> {
-  if (preferences.editorMode === mode) return
-  preferences.editorMode = mode
-
-  if (mode === 'split') {
-    previewRevision.value += 1
-    await nextTick()
-    sourceInput.value?.focus()
-    return
-  }
-
-  // 分屏左侧以 Markdown 为真源；返回时让外层按 contentRevision 重建 Milkdown，
-  // 比尝试修补隐藏实例可靠，也能让复杂节点按完整文档重新解析。
-  store.rebuildContentView()
 }
 
 // 每个编辑器实例一个控制器；切换笔记时组件重建，控制器随之重建
@@ -223,7 +184,6 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  if (previewTimer !== null) clearTimeout(previewTimer)
   tableEnhancements.forEach((handle) => handle.destroy())
   void store.flush()
 })
@@ -238,36 +198,11 @@ onBeforeUnmount(() => {
   >
     <!-- 划词 AI 工具条。挂在这一层是为了 absolute 定位有个参照，
          且跟着编辑区一起滚动——固定在视口里的话，滚动后它会指着别的地方 -->
-    <AiSelectionBar v-if="preferences.editorMode === 'wysiwyg'" :container="host" />
-
-    <div class="light-print-hide flex justify-end px-4 pt-3 md:px-8">
-      <div class="inline-flex rounded-md border border-border bg-background p-0.5 shadow-sm">
-        <Button
-          size="sm"
-          :variant="preferences.editorMode === 'wysiwyg' ? 'secondary' : 'ghost'"
-          class="h-7 px-2.5"
-          :aria-pressed="preferences.editorMode === 'wysiwyg'"
-          @click="setEditorMode('wysiwyg')"
-        >
-          <SquarePen class="size-3.5" />
-          {{ i18n.t('editor.wysiwyg') }}
-        </Button>
-        <Button
-          size="sm"
-          :variant="preferences.editorMode === 'split' ? 'secondary' : 'ghost'"
-          class="h-7 px-2.5"
-          :aria-pressed="preferences.editorMode === 'split'"
-          @click="setEditorMode('split')"
-        >
-          <Columns2 class="size-3.5" />
-          {{ i18n.t('editor.splitView') }}
-        </Button>
-      </div>
-    </div>
+    <AiSelectionBar :container="host" />
 
     <!-- spellcheck 可继承，设在这一层就同时管住标题与正文，改设置立即生效 -->
     <div
-      class="mx-auto w-full px-4 pb-4 pt-3 md:px-8 md:pb-6"
+      class="mx-auto w-full px-4 py-6 md:px-8 md:py-10"
       :spellcheck="preferences.spellcheck"
       :style="{ maxWidth: 'var(--light-editor-width)' }"
     >
@@ -284,50 +219,12 @@ onBeforeUnmount(() => {
       />
 
       <PropertyForm />
-    </div>
-
-    <div
-      v-show="preferences.editorMode === 'wysiwyg'"
-      class="mx-auto w-full px-4 pb-8 md:px-8"
-      :style="{ maxWidth: 'var(--light-editor-width)' }"
-    >
       <Milkdown />
-    </div>
-
-    <div
-      v-if="preferences.editorMode === 'split'"
-      class="grid min-h-[28rem] grid-cols-1 gap-3 px-4 pb-8 md:px-8 lg:grid-cols-2"
-    >
-      <section class="flex min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-background">
-        <div class="border-b border-border px-3 py-2 text-xs font-medium text-muted-foreground">
-          {{ i18n.t('editor.markdownSource') }}
-        </div>
-        <textarea
-          ref="sourceInput"
-          class="min-h-[24rem] flex-1 resize-none bg-transparent p-4 font-mono text-sm leading-6 text-foreground outline-none"
-          :aria-label="i18n.t('editor.markdownSource')"
-          :spellcheck="false"
-          :value="store.draft"
-          @input="onSourceInput"
-        />
-      </section>
-
-      <section class="min-h-[24rem] min-w-0 overflow-hidden rounded-lg border border-border bg-background">
-        <div class="border-b border-border px-3 py-2 text-xs font-medium text-muted-foreground">
-          {{ i18n.t('editor.preview') }}
-        </div>
-        <div class="p-4">
-          <MarkdownPreview :key="previewRevision" :markdown="store.draft" />
-        </div>
-      </section>
-    </div>
-
-    <div class="mx-auto w-full px-4 pb-8 md:px-8" :style="{ maxWidth: 'var(--light-editor-width)' }">
       <BacklinksPanel />
     </div>
 
-    <TableHandles v-if="preferences.editorMode === 'wysiwyg'" :handles="tableHandles" :menu="tableMenu" :get-ctx="getCtx" />
-    <TableMenu v-if="preferences.editorMode === 'wysiwyg'" :menu="tableMenu" :get-ctx="getCtx" />
+    <TableHandles :handles="tableHandles" :menu="tableMenu" :get-ctx="getCtx" />
+    <TableMenu :menu="tableMenu" :get-ctx="getCtx" />
 
     <!-- 菜单渲染进 SlashProvider 管理的挂载点：定位归它，样式与交互归我们 -->
     <Teleport :to="slash.contentEl">

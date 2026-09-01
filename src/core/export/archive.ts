@@ -1,6 +1,7 @@
 import { zip, type Zippable } from 'fflate'
 import type { StorageAdapter } from '../storage'
-import { flattenTree, scanTree } from '../workspace/tree'
+import { extractAssetRefs } from '../attachments/attachment-index'
+import { resolveAttachmentPath } from '../attachments/attachment'
 
 /**
  * 把工作区打包成 ZIP（需求 10.2，并兑现 10.3「数据完全可迁移」）。
@@ -31,6 +32,9 @@ export interface ArchiveOptions {
 const INTERNAL_DIR = '.light/'
 /** 回收站属于已删除内容，导出时一律排除——用户要的是「现在的库」 */
 const TRASH_DIR = '.light/trash/'
+/** 其它工具与派生数据同样不是用户选择导出的正文。 */
+const EXCLUDED_ROOTS = new Set(['.light', '.light-sync', '.git', '.obsidian', '.trash', 'node_modules'])
+const DOCUMENT_EXTENSIONS = new Set(['.md', '.board', '.canvas'])
 
 /**
  * 收集要打包的条目。
@@ -44,17 +48,41 @@ export async function collectArchiveEntries(
 ): Promise<ArchiveEntry[]> {
   const { include, includeConfig = true } = options
 
-  const nodes = flattenTree(await scanTree(storage)).filter((node) => node.kind !== 'folder')
+  const files = await collectUserFiles(storage)
   const entries: ArchiveEntry[] = []
+  const selected = new Set<string>()
 
-  for (const node of nodes) {
-    if (!shouldInclude(node.path, include)) continue
+  for (const path of files) {
+    if (!shouldInclude(path, include)) continue
 
     try {
-      entries.push({ path: node.path, data: await storage.readBinary(node.path) })
+      entries.push({ path, data: await storage.readBinary(path) })
+      selected.add(path)
     } catch {
       // 单个文件读不出来不该让整包导不出去——宁可少一篇，也别让用户一无所获
       continue
+    }
+  }
+
+  // 单篇笔记通常引用范围外的 attachments/。ZIP 只放 Markdown 会让图片、
+  // 音视频和下载附件全部失效，因此沿引用补齐实际存在的非文档文件。
+  if (include) {
+    for (const entry of [...entries]) {
+      if (!entry.path.toLowerCase().endsWith('.md')) continue
+      const markdown = new TextDecoder().decode(entry.data)
+      for (const ref of extractAssetRefs(markdown)) {
+        const assetPath = resolveAttachmentPath(ref, entry.path)
+        const extension = assetPath.slice(assetPath.lastIndexOf('.')).toLowerCase()
+        if (DOCUMENT_EXTENSIONS.has(extension) || selected.has(assetPath) || !isUserPath(assetPath)) continue
+        try {
+          const stat = await storage.stat(assetPath)
+          if (stat.isDirectory) continue
+          entries.push({ path: assetPath, data: await storage.readBinary(assetPath) })
+          selected.add(assetPath)
+        } catch {
+          // 引用本来就已经失效时仍导出正文；不能让一个坏链接阻断全部内容。
+        }
+      }
     }
   }
 
@@ -69,6 +97,32 @@ export async function collectArchiveEntries(
   }
 
   return entries
+}
+
+/** 原样遍历全部用户文件；附件没有文档扩展名，不能再借用文件树扫描。 */
+async function collectUserFiles(storage: StorageAdapter, dir = ''): Promise<string[]> {
+  const output: string[] = []
+  for (const entry of await storage.list(dir)) {
+    if (entry.isDirectory) {
+      if (dir === '' && EXCLUDED_ROOTS.has(entry.name)) continue
+      await collectUserFilesInto(storage, entry.path, output)
+    } else if (isUserPath(entry.path)) {
+      output.push(entry.path)
+    }
+  }
+  return output.sort()
+}
+
+async function collectUserFilesInto(storage: StorageAdapter, dir: string, output: string[]): Promise<void> {
+  for (const entry of await storage.list(dir)) {
+    if (entry.isDirectory) await collectUserFilesInto(storage, entry.path, output)
+    else if (isUserPath(entry.path)) output.push(entry.path)
+  }
+}
+
+function isUserPath(path: string): boolean {
+  const root = path.split('/')[0] ?? ''
+  return Boolean(path) && !EXCLUDED_ROOTS.has(root) && !path.startsWith(TRASH_DIR)
 }
 
 /**

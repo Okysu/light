@@ -2,8 +2,6 @@ import { useLocalStorage } from '@vueuse/core'
 import { defineStore } from 'pinia'
 import type { ShortcutKeys, ShortcutOverrides } from '@/core/keyboard/shortcut'
 
-export type EditorMode = 'wysiwyg' | 'split'
-
 /**
  * 应用级偏好：只影响**这台设备**，因此存 localStorage 而不是工作区。
  *
@@ -26,9 +24,6 @@ export const usePreferencesStore = defineStore('preferences', () => {
   /** 粘贴富文本里的网络图片时，是否复制进当前 Vault 的 attachments/。 */
   const localizeRemoteImages = useLocalStorage('light:localize-remote-images', false)
 
-  /** 正文视图属于设备使用习惯，不写入知识库。 */
-  const editorMode = useLocalStorage<EditorMode>('light:editor-mode', 'wysiwyg')
-
   /** 应用内快捷键覆盖项；跟随设备，不写入 Vault，也不参与 S3 同步。 */
   const shortcutOverrides = useLocalStorage<ShortcutOverrides>('light:shortcut-overrides', {})
 
@@ -50,7 +45,6 @@ export const usePreferencesStore = defineStore('preferences', () => {
     autosaveDelay,
     spellcheck,
     localizeRemoteImages,
-    editorMode,
     shortcutOverrides,
     setShortcut,
     resetShortcut,

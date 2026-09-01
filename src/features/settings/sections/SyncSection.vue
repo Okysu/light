@@ -22,6 +22,7 @@ const message = ref<string | null>(null)
 watch(message, (value) => { if (value) toast.info(value) })
 
 const POLICIES = computed<Array<{ value: ConflictPolicy; label: string; description: string }>>(() => [
+  { value: 'merge-text', label: i18n.t('sync.mergeText'), description: i18n.t('sync.mergeTextHint') },
   { value: 'keep-both', label: i18n.t('sync.keepBoth'), description: i18n.t('sync.keepBothHint') },
   { value: 'manual', label: i18n.t('sync.manual'), description: i18n.t('sync.manualHint') },
   { value: 'prefer-local', label: i18n.t('sync.localFirst'), description: i18n.t('sync.localFirstHint') },
@@ -79,7 +80,7 @@ async function runSync(): Promise<void> {
   try {
     const result = await sync.syncNow()
     if (!result) return
-    message.value = i18n.t('sync.complete', { uploaded: result.uploaded, downloaded: result.downloaded, conflicts: result.conflicts.length })
+    message.value = i18n.t('sync.complete', { uploaded: result.uploaded, downloaded: result.downloaded, merged: result.merged.length, conflicts: result.conflicts.length })
   } catch {
     // 具体错误由 store 统一提供
   }

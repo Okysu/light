@@ -13,7 +13,7 @@ export const DEFAULT_SYNC_CONFIG: SyncConfig = {
   prefix: '',
   forcePathStyle: true,
   autoSync: true,
-  conflictPolicy: 'keep-both',
+  conflictPolicy: 'merge-text',
   attachmentPolicy: { ...DEFAULT_ATTACHMENT_SYNC_POLICY },
 }
 
@@ -48,5 +48,5 @@ function text(value: unknown): string {
 }
 
 function isConflictPolicy(value: unknown): value is ConflictPolicy {
-  return value === 'keep-both' || value === 'manual' || value === 'prefer-local' || value === 'prefer-remote'
+  return value === 'merge-text' || value === 'keep-both' || value === 'manual' || value === 'prefer-local' || value === 'prefer-remote'
 }

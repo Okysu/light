@@ -41,7 +41,7 @@ function scrollTo(index: number): void {
         type="button"
         :class="
           cn(
-            'block w-full truncate rounded-md px-2 py-1 text-left text-sm text-muted-foreground',
+            'block min-w-0 w-full whitespace-normal break-words rounded-md px-2 py-1 text-left text-sm leading-5 text-muted-foreground',
             'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
             heading.level === 1 && 'font-medium text-foreground',
           )
