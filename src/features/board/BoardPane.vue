@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { Filter, Plus, X } from 'lucide-vue-next'
+import { ArchiveRestore, Columns3, Filter, Plus, X } from 'lucide-vue-next'
 import { computed, ref, watch } from 'vue'
+import ContextMenu, { type MenuItem } from '@/components/ContextMenu.vue'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -66,6 +67,33 @@ const columnSummaries = computed(() =>
   (board.board?.columns ?? []).map((column) => ({ id: column.id, title: column.title })),
 )
 
+const archivedCount = computed(() =>
+  (board.board?.columns ?? []).reduce(
+    (total, column) => total + column.cards.filter((card) => card.archived).length,
+    0,
+  ),
+)
+
+const boardMenuItems = computed<MenuItem[]>(() => [
+  { label: i18n.t('board.addColumn'), icon: Columns3, action: startAddColumn },
+  {
+    label: i18n.t('board.addCard'),
+    icon: Plus,
+    items: columnSummaries.value.map((column) => ({
+      label: column.title,
+      action: () => addCard(column.id),
+    })),
+  },
+])
+
+function startAddColumn(): void {
+  addingColumn.value = true
+}
+
+function toggleArchived(): void {
+  board.filter = { ...board.filter, includeArchived: board.filter.includeArchived !== true }
+}
+
 /** 添加卡片走对话框，与新建笔记 / 看板保持同一种交互 */
 async function addCard(columnId: string): Promise<void> {
   const title = await prompt({ title: i18n.t('board.addCard'), defaultValue: '', confirmLabel: i18n.t('common.add') })
@@ -120,6 +148,16 @@ function clearFilter(): void {
       <Button v-if="board.hasFilter" size="sm" variant="ghost" @click="clearFilter">
         <X />
         {{ i18n.t('board.clear') }}
+      </Button>
+
+      <Button
+        v-if="archivedCount > 0"
+        size="sm"
+        :variant="board.filter.includeArchived ? 'secondary' : 'ghost'"
+        @click="toggleArchived"
+      >
+        <ArchiveRestore />
+        {{ i18n.t('board.archivedCards', { count: archivedCount }) }}
       </Button>
 
       <span class="ml-auto text-xs text-muted-foreground">
@@ -196,54 +234,57 @@ function clearFilter(): void {
     </div>
 
     <!-- 列区域：横向滚动，纵向撑满 -->
-    <div v-if="board.visible" class="flex min-h-0 flex-1 gap-3 overflow-x-auto p-3">
-      <BoardColumnView
-        v-for="column in board.visible.columns"
-        :key="column.id"
-        :column="column"
-        :source="sourceColumn(column.id)"
-        :dragging-card-id="draggingCardId"
-        :columns="columnSummaries"
-        @add-card="addCard(column.id)"
-        @open-card="openCardId = $event"
-        @archive-card="toggleArchive($event)"
-        @remove-card="removeCard($event)"
-        @move-card-to="(cardId, columnId) => board.moveCard(cardId, columnId)"
-        @rename="board.renameColumn(column.id, $event)"
-        @remove="removeColumn(column.id)"
-        @archive-all="board.archiveColumn(column.id)"
-        @card-drag-start="draggingCardId = $event"
-        @card-drag-end="draggingCardId = null"
-        @drop="(cardId, index) => onCardDrop(cardId, column.id, index)"
-      />
+    <ContextMenu v-if="board.visible" :items="boardMenuItems">
+      <div class="flex min-h-0 flex-1 gap-3 overflow-x-auto p-3">
+        <BoardColumnView
+          v-for="column in board.visible.columns"
+          :key="column.id"
+          :column="column"
+          :source="sourceColumn(column.id)"
+          :dragging-card-id="draggingCardId"
+          :columns="columnSummaries"
+          :document-path="props.path"
+          @add-card="addCard(column.id)"
+          @open-card="openCardId = $event"
+          @archive-card="toggleArchive($event)"
+          @remove-card="removeCard($event)"
+          @move-card-to="(cardId, columnId) => board.moveCard(cardId, columnId)"
+          @rename="board.renameColumn(column.id, $event)"
+          @remove="removeColumn(column.id)"
+          @archive-all="board.archiveColumn(column.id)"
+          @card-drag-start="draggingCardId = $event"
+          @card-drag-end="draggingCardId = null"
+          @drop="(cardId, index) => onCardDrop(cardId, column.id, index)"
+        />
 
-      <!-- 新增列固定在最右，与卡片的「添加」保持同一种位置语言 -->
-      <div class="w-72 shrink-0">
-        <div v-if="addingColumn" class="space-y-1.5 rounded-lg border border-border bg-sidebar p-2">
-          <Input
-            v-model="newColumnTitle"
-            :placeholder="i18n.t('board.columnName')"
-            autofocus
-            @keydown.enter.prevent="commitAddColumn"
-            @keydown.esc="addingColumn = false"
-          />
-          <div class="flex gap-1.5">
-            <Button size="sm" :disabled="!newColumnTitle.trim()" @click="commitAddColumn">{{ i18n.t('common.add') }}</Button>
-            <Button size="sm" variant="ghost" @click="addingColumn = false">{{ i18n.t('common.cancel') }}</Button>
+        <!-- 新增列固定在最右，与卡片的「添加」保持同一种位置语言 -->
+        <div class="w-72 shrink-0">
+          <div v-if="addingColumn" class="space-y-1.5 rounded-lg border border-border bg-sidebar p-2">
+            <Input
+              v-model="newColumnTitle"
+              :placeholder="i18n.t('board.columnName')"
+              autofocus
+              @keydown.enter.prevent="commitAddColumn"
+              @keydown.esc="addingColumn = false"
+            />
+            <div class="flex gap-1.5">
+              <Button size="sm" :disabled="!newColumnTitle.trim()" @click="commitAddColumn">{{ i18n.t('common.add') }}</Button>
+              <Button size="sm" variant="ghost" @click="addingColumn = false">{{ i18n.t('common.cancel') }}</Button>
+            </div>
           </div>
-        </div>
 
-        <Button
-          v-else
-          class="w-full justify-start text-muted-foreground"
-          variant="ghost"
-          @click="addingColumn = true"
-        >
-          <Plus />
-          {{ i18n.t('board.addColumn') }}
-        </Button>
+          <Button
+            v-else
+            class="w-full justify-start text-muted-foreground"
+            variant="ghost"
+            @click="startAddColumn"
+          >
+            <Plus />
+            {{ i18n.t('board.addColumn') }}
+          </Button>
+        </div>
       </div>
-    </div>
+    </ContextMenu>
 
     <p v-else class="flex h-full items-center justify-center text-sm text-muted-foreground">
       {{ board.loadError ?? i18n.t('board.opening') }}
@@ -252,6 +293,7 @@ function clearFilter(): void {
     <CardDetail
       :card="openCard"
       :suggestions="board.allTags"
+      :document-path="props.path"
       @close="openCardId = null"
       @update="openCardId && board.updateCard(openCardId, $event)"
       @remove="

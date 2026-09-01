@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { Archive, MoreHorizontal, Plus, Trash2 } from 'lucide-vue-next'
 import { computed, ref } from 'vue'
-import ContextMenu, { type MenuItem } from '@/components/ContextMenu.vue'
+import ContextMenu, { type MenuAction } from '@/components/ContextMenu.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { countCards } from '@/core/board/operations'
 import { isBoardCardDrag, readBoardCardDrag } from '@/core/board/drag'
 import type { BoardColumn } from '@/core/board/types'
@@ -15,6 +16,7 @@ const props = defineProps<{
   /** 未经筛选的原始列，用于显示真实总数 */
   source: BoardColumn | undefined
   draggingCardId: string | null
+  documentPath: string
   /** 全部列，卡片的「移动到」菜单要用 */
   columns: ReadonlyArray<{ id: string; title: string }>
 }>()
@@ -37,17 +39,23 @@ const emit = defineEmits<{
 const editingTitle = ref(false)
 const i18n = useI18nStore()
 const titleDraft = ref('')
+const actionsOpen = ref(false)
 /** 拖拽悬停时的插入位置，null 表示当前没有卡片悬在本列上 */
 const dropIndex = ref<number | null>(null)
 
 const counts = computed(() => countCards(props.source ?? props.column))
 
-const menuItems = computed<MenuItem[]>(() => [
+const menuItems = computed<MenuAction[]>(() => [
   { label: i18n.t('board.renameColumn'), icon: MoreHorizontal, action: startRename },
   { label: i18n.t('board.addCard'), icon: Plus, action: () => emit('addCard') },
   { label: i18n.t('board.archiveColumn'), icon: Archive, separatorBefore: true, action: () => emit('archiveAll') },
   { label: i18n.t('board.deleteColumn'), icon: Trash2, danger: true, separatorBefore: true, action: () => emit('remove') },
 ])
+
+function runAction(action: MenuAction): void {
+  actionsOpen.value = false
+  void action.action()
+}
 
 function startRename(): void {
   titleDraft.value = props.column.title
@@ -95,10 +103,9 @@ function onDrop(event: DragEvent): void {
 </script>
 
 <template>
-  <section class="flex h-full w-72 shrink-0 flex-col rounded-lg border border-border bg-sidebar">
-    <!-- 右键菜单只包住列头：包住整列的话，在卡片上右键也会弹出「删除列」，
-         那是误操作的温床 -->
-    <ContextMenu :items="menuItems">
+  <ContextMenu :items="menuItems">
+    <!-- 整列空白都可唤起列菜单；卡片自身会阻止冒泡并显示卡片菜单。 -->
+    <section class="flex h-full w-72 shrink-0 flex-col rounded-lg border border-border bg-sidebar" @contextmenu.stop>
       <header class="flex shrink-0 items-center gap-2 px-3 py-2">
         <Input
         v-if="editingTitle"
@@ -116,25 +123,50 @@ function onDrop(event: DragEvent): void {
         <span class="shrink-0 rounded bg-muted px-1.5 text-xs text-muted-foreground">
           {{ column.cards.length }}<template v-if="counts.total !== column.cards.length">/{{ counts.total }}</template>
         </span>
+        <Popover v-model:open="actionsOpen">
+          <PopoverTrigger as-child>
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              :title="i18n.t('board.columnActions')"
+              @click.stop
+            >
+              <MoreHorizontal />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" class="w-48 p-1">
+            <button
+              v-for="item in menuItems"
+              :key="item.label"
+              type="button"
+              class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
+              :class="item.danger && 'text-destructive hover:bg-destructive/10'"
+              @click="runAction(item)"
+            >
+              <component :is="item.icon" v-if="item.icon" class="size-4" />
+              {{ item.label }}
+            </button>
+          </PopoverContent>
+        </Popover>
         </template>
       </header>
-    </ContextMenu>
 
-    <!-- 卡片列表本身就是放置区：空列也要能接住卡片，所以高度撑满 -->
-    <div
-      class="min-h-0 flex-1 space-y-2 overflow-y-auto px-2 pb-2"
-      @dragover="onDragOver"
-      @dragleave="dropIndex = null"
-      @drop.prevent="onDrop"
-    >
+      <!-- 卡片列表本身就是放置区：空列也要能接住卡片，所以高度撑满 -->
+      <div
+        class="min-h-0 flex-1 space-y-2 overflow-y-auto px-2 pb-2"
+        @dragover="onDragOver"
+        @dragleave="dropIndex = null"
+        @drop.prevent="onDrop"
+      >
       <template v-for="(card, index) in column.cards" :key="card.id">
         <div v-if="dropIndex === index" class="h-0.5 rounded bg-primary" />
-        <div :data-card-id="card.id">
+        <div :data-card-id="card.id" @contextmenu.stop>
           <BoardCardView
             :card="card"
             :dragging="draggingCardId === card.id"
             :column-id="column.id"
             :columns="columns"
+            :document-path="documentPath"
             @open="emit('openCard', card.id)"
             @dragstart="emit('cardDragStart', card.id)"
             @dragend="emit('cardDragEnd')"
@@ -153,20 +185,21 @@ function onDrop(event: DragEvent): void {
       >
         {{ i18n.t('board.empty') }}
       </p>
-    </div>
+      </div>
 
-    <footer class="shrink-0 px-2 pb-2">
-      <!-- 添加走对话框，与新建笔记 / 看板保持同一种交互 -->
-      <Button
-        class="w-full justify-start text-muted-foreground"
-        size="sm"
-        variant="ghost"
-        @click="emit('addCard')"
-      >
-        <Plus />
-        {{ i18n.t('board.addCard') }}
-      </Button>
-    </footer>
+      <footer class="shrink-0 px-2 pb-2">
+        <!-- 添加走对话框，与新建笔记 / 看板保持同一种交互 -->
+        <Button
+          class="w-full justify-start text-muted-foreground"
+          size="sm"
+          variant="ghost"
+          @click="emit('addCard')"
+        >
+          <Plus />
+          {{ i18n.t('board.addCard') }}
+        </Button>
+      </footer>
 
-  </section>
+    </section>
+  </ContextMenu>
 </template>

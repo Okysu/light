@@ -11,12 +11,11 @@ import { useWorkspaceStore } from './workspace'
  * 用户报的现象：粘贴图片能显示，切一次标签页回来就变成
  * `net::ERR_FILE_NOT_FOUND`，刷新页面又好了。
  *
- * 根因是同一个 URL 有两个生命周期主人——store 缓存着它，
- * 而编辑器的 NodeView 在销毁时也去 revoke 它。切标签页会销毁编辑器，
- * URL 就此失效，但 store 的缓存里还留着那个已经死掉的字符串。
- * 刷新页面清空了缓存，所以「刷新就好了」。
+ * 根因是同一个 URL 会同时被多个视图使用；其中一个视图销毁时若直接撤销，
+ * 其它仍在屏幕上的图片也会一起失效。跨列拖卡正好会短暂地让旧、新卡片
+ * 同时持有封面 URL，因此这个竞态特别稳定。
  *
- * 这里锁住的结论：**缓存里的 URL 只能由 store 自己释放**。
+ * 这里锁住的结论：URL 由 store 引用计数，最后一个使用者放手后才真正撤销。
  */
 
 /** jsdom 没有 URL.createObjectURL，自己记一份账 */
@@ -66,6 +65,41 @@ describe('附件 blob URL 的所有权', () => {
     const second = await attachments.resolve('attachments/图.png', '笔记.md')
 
     expect(first).toBe(second)
+  })
+
+  it('共享 URL 在最后一个使用者释放前始终有效', async () => {
+    const tracker = trackObjectUrls()
+    await setup()
+    const attachments = useAttachmentsStore()
+
+    const first = await attachments.resolve('attachments/图.png', '笔记.md')
+    const second = await attachments.resolve('attachments/图.png', '笔记.md')
+    attachments.release(first!)
+
+    expect(tracker.alive.has(second!)).toBe(true)
+    attachments.release(second!)
+    expect(tracker.alive.has(second!)).toBe(false)
+  })
+
+  it('并发解析同一附件只读盘并创建一次 URL', async () => {
+    const tracker = trackObjectUrls()
+    const { storage } = await setup()
+    const originalRead = storage.readBinary.bind(storage)
+    let allowRead!: () => void
+    const gate = new Promise<void>((resolve) => { allowRead = resolve })
+    const read = vi.spyOn(storage, 'readBinary').mockImplementation(async (path) => {
+      await gate
+      return originalRead(path)
+    })
+    const attachments = useAttachmentsStore()
+
+    const first = attachments.resolve('attachments/图.png', '笔记.md')
+    const second = attachments.resolve('attachments/图.png', '笔记.md')
+    allowRead()
+
+    expect(await first).toBe(await second)
+    expect(read).toHaveBeenCalledTimes(1)
+    expect(tracker.created).toHaveLength(1)
   })
 
   it('release 之后再解析会拿到一个新的、活着的 URL', async () => {

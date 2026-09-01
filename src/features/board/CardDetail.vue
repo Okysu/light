@@ -18,7 +18,7 @@ import { useWorkspaceStore } from '@/stores/workspace'
 import { useAttachmentsStore } from '@/stores/attachments'
 import { useI18nStore } from '@/stores/i18n'
 
-const props = defineProps<{ card: BoardCard | null; suggestions: string[] }>()
+const props = defineProps<{ card: BoardCard | null; suggestions: string[]; documentPath: string }>()
 
 const emit = defineEmits<{
   close: []
@@ -59,8 +59,8 @@ function pickCover(): void {
   input.accept = 'image/*'
   input.addEventListener('change', async () => {
     const file = input.files?.[0]
-    if (!file || !editor.activePath) return
-    const href = await attachments.save(new Uint8Array(await file.arrayBuffer()), file.type, editor.activePath, file.name)
+    if (!file) return
+    const href = await attachments.save(new Uint8Array(await file.arrayBuffer()), file.type, props.documentPath, file.name)
     patch({ cover: href })
   })
   input.click()

@@ -16,12 +16,12 @@ import type { BoardCard } from '@/core/board/types'
 import { writeBoardCardDrag } from '@/core/board/drag'
 import { cn } from '@/lib/utils'
 import { useAttachmentsStore } from '@/stores/attachments'
-import { useEditorStore } from '@/stores/editor'
 import { useI18nStore } from '@/stores/i18n'
 
 const props = defineProps<{
   card: BoardCard
   dragging: boolean
+  documentPath: string
   /** 所在列，用于「移动到」时排除自身 */
   columnId: string
   /** 全部列，供「移动到」列出目标 */
@@ -39,20 +39,32 @@ const emit = defineEmits<{
 const i18n = useI18nStore()
 
 const attachments = useAttachmentsStore()
-const editor = useEditorStore()
 const coverUrl = ref('')
 let ownedCoverUrl = ''
+let coverRequest = 0
+let destroyed = false
 
-watch(() => props.card.cover, async (src) => {
+watch(() => [props.card.cover, props.documentPath] as const, async ([src]) => {
+  const request = ++coverRequest
   if (ownedCoverUrl) attachments.release(ownedCoverUrl)
   ownedCoverUrl = ''
   coverUrl.value = ''
-  if (!src || !editor.activePath) return
-  const url = await attachments.resolve(src, editor.activePath)
-  if (url) { ownedCoverUrl = url; coverUrl.value = url }
+  if (!src) return
+  const url = await attachments.resolve(src, props.documentPath)
+  if (!url) return
+  if (destroyed || request !== coverRequest) {
+    attachments.release(url)
+    return
+  }
+  ownedCoverUrl = url
+  coverUrl.value = url
 }, { immediate: true })
 
-onBeforeUnmount(() => { if (ownedCoverUrl) attachments.release(ownedCoverUrl) })
+onBeforeUnmount(() => {
+  destroyed = true
+  coverRequest += 1
+  if (ownedCoverUrl) attachments.release(ownedCoverUrl)
+})
 
 /** 可移动到的目标列，由父级传入——卡片自己不该知道整个看板的结构 */
 const menuItems = computed<MenuItem[]>(() => [

@@ -15,8 +15,17 @@ export const useAttachmentsStore = defineStore('attachments', () => {
   const workspace = useWorkspaceStore()
 
   const service = shallowRef<AttachmentService | null>(null)
-  /** 工作区路径 → blob URL */
-  const urls = new Map<string, string>()
+  interface CachedUrl {
+    url: string
+    /** 每次 resolve 都取得一份所有权；所有使用者 release 后才真正撤销。 */
+    references: number
+  }
+
+  /** “文档路径 + 原始引用” → 可共享的 blob URL */
+  const urls = new Map<string, CachedUrl>()
+  /** 合并同时发生的磁盘读取，避免为同一附件创建多个 URL 并泄漏旧的那个。 */
+  const pending = new Map<string, Promise<string | null>>()
+  let generation = 0
 
   function ensureService(): AttachmentService | null {
     if (!workspace.storage) return null
@@ -35,9 +44,7 @@ export const useAttachmentsStore = defineStore('attachments', () => {
     const instance = ensureService()
     if (!instance) throw new Error('尚未打开工作区')
 
-    const { path, href } = await instance.save(data, mime, notePath, name)
-    // 刚存进去的文件马上就要显示，顺手把 URL 备好
-    urls.delete(path)
+    const { href } = await instance.save(data, mime, notePath, name)
     return href
   }
 
@@ -66,15 +73,38 @@ export const useAttachmentsStore = defineStore('attachments', () => {
     // 先查缓存再读盘：命中时省掉一次完整的文件读取
     const key = `${notePath}::${src}`
     const cached = urls.get(key)
-    if (cached) return cached
+    if (cached) {
+      cached.references += 1
+      return cached.url
+    }
 
-    const result = await instance.read(src, notePath)
-    if (!result) return null
+    let request = pending.get(key)
+    if (!request) {
+      const requestGeneration = generation
+      request = (async () => {
+        const result = await instance.read(src, notePath)
+        if (!result || requestGeneration !== generation) return null
 
-    const url = URL.createObjectURL(
-      new Blob([result.data.slice().buffer as ArrayBuffer], { type: result.mime }),
-    )
-    urls.set(key, url)
+        const url = URL.createObjectURL(
+          new Blob([result.data.slice().buffer as ArrayBuffer], { type: result.mime }),
+        )
+        urls.set(key, { url, references: 0 })
+        return url
+      })()
+      pending.set(key, request)
+    }
+
+    let url: string | null
+    try {
+      url = await request
+    } finally {
+      if (pending.get(key) === request) pending.delete(key)
+    }
+    if (!url) return null
+
+    const entry = urls.get(key)
+    if (!entry || entry.url !== url) return null
+    entry.references += 1
     return url
   }
 
@@ -86,8 +116,10 @@ export const useAttachmentsStore = defineStore('attachments', () => {
    * 此时去 revoke 只会误伤同名条目。
    */
   function release(url: string): void {
-    for (const [key, value] of urls) {
-      if (value !== url) continue
+    for (const [key, entry] of urls) {
+      if (entry.url !== url) continue
+      entry.references = Math.max(0, entry.references - 1)
+      if (entry.references > 0) return
       urls.delete(key)
       URL.revokeObjectURL(url)
       return
@@ -99,8 +131,10 @@ export const useAttachmentsStore = defineStore('attachments', () => {
    * 切换工作区时必须调用：那些 URL 指向的是上一个 Vault 的内容。
    */
   function invalidate(): void {
-    for (const url of urls.values()) URL.revokeObjectURL(url)
+    generation += 1
+    for (const entry of urls.values()) URL.revokeObjectURL(entry.url)
     urls.clear()
+    pending.clear()
     service.value = null
   }
 

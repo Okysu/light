@@ -103,6 +103,26 @@ describe('moveCard', () => {
     expect(layout(next)).toEqual({ c1: ['b'], c2: ['a', 'c'], c3: [] })
   })
 
+  it('跨列移动完整保留封面、描述、标签、子任务和关联信息', () => {
+    const original = board()
+    const rich = card('rich', '完整卡片', {
+      cover: '../attachments/cover.png',
+      description: '包含 **Markdown**',
+      tags: ['图片', '重要'],
+      checklist: [{ id: 'task', text: '检查预览', done: true }],
+      notePath: '说明.md',
+      assignee: 'Alice',
+      due: '2026-09-02',
+      priority: 'high',
+    })
+    original.columns[0]!.cards.push(rich)
+
+    const moved = moveCard(original, rich.id, 'c2', 0)
+
+    expect(findCard(moved, rich.id)).toBe(rich)
+    expect(findCard(moved, rich.id)).toEqual(rich)
+  })
+
   it('跨列移动省略下标时追加到末尾', () => {
     expect(layout(moveCard(board(), 'a', 'c2'))).toEqual({ c1: ['b'], c2: ['c', 'a'], c3: [] })
   })

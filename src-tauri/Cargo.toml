@@ -1,6 +1,6 @@
 [package]
 name = "light"
-version = "0.0.5"
+version = "0.0.6"
 description = "Light — 本地优先的轻量知识库"
 authors = ["Light"]
 license = "AGPL-3.0-only"

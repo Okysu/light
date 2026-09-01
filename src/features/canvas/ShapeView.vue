@@ -25,24 +25,32 @@ const attachments = useAttachmentsStore()
 const i18n = useI18nStore()
 const imageUrl = ref('')
 let ownedUrl = ''
+let imageRequest = 0
+let destroyed = false
 
 watch(
-  () => props.shape.kind === 'imageRef' ? props.shape.src : '',
-  async (src) => {
+  () => [props.shape.kind === 'imageRef' ? props.shape.src : '', props.documentPath] as const,
+  async ([src]) => {
+    const request = ++imageRequest
     if (ownedUrl) attachments.release(ownedUrl)
     ownedUrl = ''
     imageUrl.value = ''
     if (!src) return
     const url = await attachments.resolve(src, props.documentPath)
-    if (url) {
-      ownedUrl = url
-      imageUrl.value = url
+    if (!url) return
+    if (destroyed || request !== imageRequest) {
+      attachments.release(url)
+      return
     }
+    ownedUrl = url
+    imageUrl.value = url
   },
   { immediate: true },
 )
 
 onBeforeUnmount(() => {
+  destroyed = true
+  imageRequest += 1
   if (ownedUrl) attachments.release(ownedUrl)
 })
 

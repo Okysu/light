@@ -174,9 +174,14 @@ export function createAttachmentView(bridge: AttachmentBridge) {
     if (node.attrs['title']) dom.title = node.attrs['title'] as string
 
     let objectUrl: string | null = null
+    let destroyed = false
 
     if (isInternalAttachment(src)) {
       void bridge.resolve(src).then((url) => {
+        if (destroyed) {
+          if (url?.startsWith('blob:')) bridge.release(url)
+          return
+        }
         if (!url) {
           // 断链就让 alt 顶上，比一个破图图标更能说明发生了什么
           dom.dataset['missing'] = ''
@@ -199,6 +204,8 @@ export function createAttachmentView(bridge: AttachmentBridge) {
        * 下次解析会把它原样发出来——切一次标签页图片就全裂了。
        */
       destroy: () => {
+        destroyed = true
+        dom.removeAttribute('src')
         if (objectUrl) bridge.release(objectUrl)
       },
     }
